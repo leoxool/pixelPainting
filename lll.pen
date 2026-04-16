@@ -1,0 +1,903 @@
+{
+  "version": "2.10",
+  "children": [
+    {
+      "type": "frame",
+      "id": "Fb5I1",
+      "x": 0,
+      "y": 0,
+      "name": "Pixel Mosaic",
+      "width": 1200,
+      "height": 900,
+      "fill": "#d9d9d9ff",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "nfU7O",
+          "name": "bg",
+          "width": 800,
+          "height": 900,
+          "fill": "#0A0A0A",
+          "layout": "vertical",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "hRjCS",
+              "name": "content",
+              "width": 512,
+              "layout": "vertical",
+              "gap": 40,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FfQgE",
+                  "name": "logoArea",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "id": "Rv2mb",
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "s.png",
+                        "mode": "fill"
+                      },
+                      "width": 250,
+                      "height": 249,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": {
+                          "type": "color",
+                          "color": "#000000ff",
+                          "enabled": false
+                        }
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "o2d13",
+                      "name": "logoTitle",
+                      "fill": "#FFFFFF",
+                      "content": "摄影技术和绘画",
+                      "fontFamily": "Inter",
+                      "fontSize": 48,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SQTGT",
+                  "name": "btnArea",
+                  "width": 320,
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "SoPdI",
+                      "name": "blueBtn",
+                      "width": "fill_container",
+                      "height": 48,
+                      "fill": "#cb1b1b",
+                      "cornerRadius": 24,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "XXEqf",
+                          "name": "blueBtnTxt",
+                          "fill": "#FFFFFF",
+                          "content": "作为学生加入课堂",
+                          "fontFamily": "Geist",
+                          "fontSize": 16,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lKgiL",
+                      "name": "outlineBtn",
+                      "width": "fill_container",
+                      "height": 48,
+                      "fill": "#00000000",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1.5,
+                        "fill": "#1A1A1A"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "eqM8O",
+                          "name": "outlineBtnTxt",
+                          "fill": "#A1A1AA",
+                          "content": "打开教师工作台",
+                          "fontFamily": "Funnel Sans",
+                          "fontSize": 16,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "cmKqg",
+          "name": "loginBg",
+          "width": 800,
+          "height": 900,
+          "fill": "#0A0A0A",
+          "layout": "vertical",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "DnNhq",
+              "name": "loginContent",
+              "width": 400,
+              "layout": "vertical",
+              "gap": 24,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "SHEIi",
+                  "name": "loginHeader",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "0wak1",
+                      "name": "loginTitle",
+                      "fill": "#FFFFFF",
+                      "content": "登陆",
+                      "fontFamily": "Inter",
+                      "fontSize": 28,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MAhwH",
+                  "name": "errorBox",
+                  "width": "fill_container",
+                  "height": 40,
+                  "fill": "#3a5a78ff",
+                  "cornerRadius": 8,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "9VPe3",
+                      "name": "errorTxt",
+                      "fill": "#FFFFFF",
+                      "content": "Error message here",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "cMkoc",
+                  "name": "formArea",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "49RYb",
+                      "name": "emailField",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "CQg1h",
+                          "name": "emailLabel",
+                          "fill": "#A1A1AA",
+                          "content": "Email",
+                          "fontFamily": "Funnel Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "bpeCK",
+                          "name": "emailBox",
+                          "width": "fill_container",
+                          "height": 44,
+                          "fill": "#1A1A1A",
+                          "cornerRadius": 8,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "NVj8h",
+                              "name": "emailTxt",
+                              "fill": "#71717A",
+                              "content": "you@example.com",
+                              "fontFamily": "Geist",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BIkZp",
+                      "name": "passField",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xq36c",
+                          "name": "passLabel",
+                          "fill": "#A1A1AA",
+                          "content": "Password",
+                          "fontFamily": "Funnel Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "BabbA",
+                          "name": "passBox",
+                          "width": "fill_container",
+                          "height": 44,
+                          "fill": "#1A1A1A",
+                          "cornerRadius": 8,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "9bhFG",
+                              "name": "passTxt",
+                              "fill": "#71717A",
+                              "content": "••••••••",
+                              "fontFamily": "Geist",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "P1tTu",
+                      "name": "btnRow",
+                      "width": "fill_container",
+                      "height": 40,
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "kbpuG",
+                          "name": "signInBtn",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "fill": "#cb1b1bff",
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "C4Aap",
+                              "name": "signInTxt",
+                              "fill": "#FFFFFF",
+                              "content": "登陆",
+                              "fontFamily": "Geist",
+                              "fontSize": 14,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "jMMLt",
+          "name": "teacherBg",
+          "width": 800,
+          "height": 900,
+          "fill": "#0A0A0A",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "ZUzzC",
+              "name": "teacherHeader",
+              "width": "fill_container",
+              "height": 60,
+              "padding": [
+                0,
+                32
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "oUWSG",
+                  "name": "headerLeft",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "WUD2d",
+                      "name": "headerTitle",
+                      "fill": "#FFFFFF",
+                      "content": "教师工作台",
+                      "fontFamily": "Inter",
+                      "fontSize": 28,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Z0mTR",
+                      "name": "headerSub",
+                      "fill": "#A1A1AA",
+                      "content": "teacher@pixel.edu",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "cxFG9",
+                  "name": "logoutBtn",
+                  "width": 100,
+                  "height": 36,
+                  "fill": "#00000000",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1.5,
+                    "fill": "#1A1A1A"
+                  },
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "DGIQt",
+                      "name": "logoutTxt",
+                      "fill": "#FFFFFF",
+                      "content": "登出",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "s7deK",
+              "name": "dashGrid",
+              "width": 768,
+              "height": 720,
+              "gap": 24,
+              "padding": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "DmgBy",
+                  "name": "createCard",
+                  "width": 340,
+                  "height": 280,
+                  "fill": "#151414ff",
+                  "cornerRadius": 12,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 25,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Sb79F",
+                      "name": "createTitle",
+                      "fill": "#FFFFFF",
+                      "content": "新建教室",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MWujO",
+                      "name": "createInput",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#1A1A1A",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U8hI2",
+                          "name": "createInputTxt",
+                          "rotation": 0.04926054683093142,
+                          "fill": "#FFFFFF",
+                          "content": "教室名称",
+                          "textAlign": "center",
+                          "textAlignVertical": "bottom",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dbYkH",
+                      "name": "createBtn",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "#cb1b1b",
+                      "cornerRadius": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "fwJ3e",
+                          "name": "createBtnTxt",
+                          "fill": "#FFFFFF",
+                          "content": "确定",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "hzsXo",
+                  "name": "roomsCard",
+                  "width": 340,
+                  "height": 280,
+                  "fill": "#151414",
+                  "cornerRadius": 12,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "bapbK",
+                      "name": "roomsTitle",
+                      "fill": "#FFFFFF",
+                      "content": "已建教室",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "aRnSl",
+                      "name": "roomsList",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "yXwS2",
+                          "name": "roomItem",
+                          "width": "fill_container",
+                          "height": 56,
+                          "fill": "#1A1A1A",
+                          "cornerRadius": 8,
+                          "padding": 12,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "7aiTQ",
+                              "name": "roomInfo",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "dZLPQ",
+                                  "name": "roomName",
+                                  "fill": "#FFFFFF",
+                                  "content": "Art Class A",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 14,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "UIukh",
+                                  "name": "roomCode",
+                                  "fill": "#A1A1AA",
+                                  "content": "Code: 1234",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "OOTtB",
+                              "name": "statusBadge",
+                              "width": 60,
+                              "height": 24,
+                              "fill": "#cb1b1b",
+                              "cornerRadius": 12,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "justifyContent": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "xyXsS",
+                                  "name": "statusTxt",
+                                  "fill": "#FFFFFF",
+                                  "content": "active",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 11,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "yXfu2",
+          "name": "studentBg",
+          "width": 800,
+          "height": 900,
+          "fill": "#0A0A0A",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "tLqjt",
+              "name": "studentHeader",
+              "width": 500,
+              "layout": "vertical",
+              "gap": 8,
+              "padding": [
+                120,
+                0,
+                32,
+                0
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "G0FdO",
+                  "name": "studentTitle",
+                  "fill": "#FFFFFF",
+                  "content": "欢迎加入课堂",
+                  "fontFamily": "Inter",
+                  "fontSize": 28,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JkVy6",
+              "name": "studentContent",
+              "width": 500,
+              "layout": "vertical",
+              "gap": 24,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "KRNGP",
+                  "name": "nickField",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "98aGR",
+                      "name": "nickLabel",
+                      "fill": "#A1A1AA",
+                      "content": "你的昵称",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "4umt3",
+                      "name": "nickInput",
+                      "width": "fill_container",
+                      "height": 48,
+                      "fill": "#1A1A1A",
+                      "cornerRadius": 8,
+                      "padding": [
+                        0,
+                        16
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "kbaZR",
+                          "name": "nickTxt",
+                          "fill": "#FFFFFF",
+                          "content": "给自己起个名字",
+                          "fontFamily": "Geist",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BDodj",
+                  "name": "roomCard",
+                  "width": "fill_container",
+                  "height": 320,
+                  "fill": "#0A0A0A",
+                  "cornerRadius": 12,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "1iKlp",
+                      "name": "roomCardTitle",
+                      "fill": "#FFFFFF",
+                      "content": "可用房间",
+                      "fontFamily": "Inter",
+                      "fontSize": 16,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tHd0D",
+                      "name": "roomItems",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "5DxUd",
+                          "name": "roomRow",
+                          "width": "fill_container",
+                          "height": 64,
+                          "fill": "#1A1A1A",
+                          "cornerRadius": 8,
+                          "padding": 16,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "jlR4k",
+                              "name": "roomRowLeft",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "8YLhF",
+                                  "name": "roomRowName",
+                                  "fill": "#FFFFFF",
+                                  "content": "Art Class A",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 14,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "OnTYB",
+                                  "name": "roomRowTime",
+                                  "fill": "#A1A1AA",
+                                  "content": "2 min ago",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "XfEcQ",
+                              "name": "roomRowBadge",
+                              "width": 58,
+                              "height": 28,
+                              "fill": "#cb1b1b",
+                              "cornerRadius": 14,
+                              "padding": [
+                                4,
+                                10
+                              ],
+                              "justifyContent": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "pGYaX",
+                                  "name": "roomRowBadgeTxt",
+                                  "fill": "#FFFFFF",
+                                  "content": "进行中",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 11,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hYZx2",
+                          "name": "roomRow2",
+                          "width": "fill_container",
+                          "height": 64,
+                          "fill": "#1A1A1A",
+                          "cornerRadius": 8,
+                          "padding": 16,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "dbO0O",
+                              "name": "roomRowLeft2",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "GwPqg",
+                                  "name": "roomRowName2",
+                                  "fill": "#FFFFFF",
+                                  "content": "Drawing Workshop",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 14,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "GggsQ",
+                                  "name": "roomRowTime2",
+                                  "fill": "#A1A1AA",
+                                  "content": "5 min ago",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "EqgcN",
+                              "name": "roomRowBadge2",
+                              "width": 56,
+                              "height": 28,
+                              "fill": "#706e67ff",
+                              "cornerRadius": 14,
+                              "padding": [
+                                4,
+                                10
+                              ],
+                              "justifyContent": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "1Vf7e",
+                                  "name": "roomRowBadgeTxt2",
+                                  "fill": "#FFFFFF",
+                                  "content": "等待中",
+                                  "fontFamily": "Geist",
+                                  "fontSize": 11,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "rectangle",
+      "id": "0lBcs",
+      "x": 593,
+      "y": 1048,
+      "fill": "#CCCCCC",
+      "width": 1,
+      "height": 3
+    }
+  ]
+}
