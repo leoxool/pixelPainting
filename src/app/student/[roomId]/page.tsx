@@ -19,18 +19,31 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<string>('');
   const [isLeaving, setIsLeaving] = useState(false);
+  const [nickname, setNickname] = useState('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const userIdRef = useRef<string>('');
 
   useEffect(() => {
-    params.then((p) => setRoomId(p.roomId));
+    params.then((p) => {
+      setRoomId(p.roomId);
+      // 从 localStorage 获取昵称
+      setNickname(localStorage.getItem(`pixel_nickname_${p.roomId}`) || '匿名学生');
+    });
   }, [params]);
 
-  // Initialize Supabase client
+  // Initialize Supabase client and user
   useEffect(() => {
     supabaseRef.current = createClient();
+    const getUser = async () => {
+      const { data: { user } } = await supabaseRef.current!.auth.getUser();
+      if (user) {
+        userIdRef.current = user.id;
+      }
+    };
+    getUser();
   }, []);
 
   const fetchRoomData = useCallback(async () => {
@@ -53,16 +66,14 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
     setRoom(roomData);
     setSessionStatus(roomData?.status || '');
 
-    // Get existing assets for this student
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
+    // Get existing assets for this student (using userId)
+    if (userIdRef.current) {
       const { data: assetData } = await supabase
         .from('assets')
         .select('*')
         .eq('room_id', roomId)
-        .eq('student_id', user.id);
+        .eq('student_id', userIdRef.current);
+
       if (assetData && assetData.length > 0) {
         setAssets(assetData);
         setHasSubmitted(true);
@@ -154,12 +165,6 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
     if (!supabaseRef.current) return;
     const supabase = supabaseRef.current;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      window.location.href = '/student';
-      return;
-    }
-
     // Stop camera stream
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
@@ -172,7 +177,7 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
       .from('room_members')
       .delete()
       .eq('room_id', roomId)
-      .eq('user_id', user.id);
+      .eq('user_id', userIdRef.current);
 
     window.location.href = '/student';
   };
@@ -242,16 +247,7 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      alert('Not authenticated');
-      setIsUploading(false);
-      return;
-    }
-
-    const fileName = `${user.id}/${roomId}/${Date.now()}.png`;
+    const fileName = `${userIdRef.current}/${roomId}/${Date.now()}.png`;
 
     const { error: uploadError } = await supabase.storage
       .from('assets')
@@ -274,7 +270,7 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
       .from('assets')
       .insert({
         room_id: roomId,
-        student_id: user.id,
+        student_id: userIdRef.current,
         texture_url: data.publicUrl,
         metadata: {
           brightness_order: [],

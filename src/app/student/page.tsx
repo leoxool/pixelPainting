@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { Room } from '@/lib/supabase/types';
 
 export default function StudentPage() {
@@ -12,20 +13,34 @@ export default function StudentPage() {
   const [joinCode, setJoinCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      fetchRooms();
-    };
     checkUser();
-  }, [supabase, router]);
+  }, []);
+
+  const checkUser = async () => {
+    setIsCheckingAuth(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setIsSignedIn(true);
+      fetchRooms();
+    } else {
+      router.push('/login?redirect=/student');
+    }
+    setIsCheckingAuth(false);
+  };
+
+  useEffect(() => {
+    if (isSignedIn) {
+      fetchRooms();
+      const interval = setInterval(fetchRooms, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isSignedIn]);
 
   const fetchRooms = useCallback(async () => {
     const { data } = await supabase
@@ -37,6 +52,18 @@ export default function StudentPage() {
 
     if (data) setRooms(data);
   }, [supabase]);
+
+  const handleSignOut = async () => {
+    // 清除会话令牌
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.rpc('clear_session_token', { p_user_id: user.id });
+    }
+    localStorage.removeItem('pixel_session_id');
+    await supabase.auth.signOut();
+    setIsSignedIn(false);
+    router.push('/login?redirect=/student');
+  };
 
   const handleSelectRoom = (room: Room) => {
     setSelectedRoom(room);
@@ -63,15 +90,14 @@ export default function StudentPage() {
       return;
     }
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       setError('请先登录');
       setIsLoading(false);
       return;
     }
 
-    const user = userData.user;
-
+    // 检查是否已是该房间成员
     const { data: existingMember } = await supabase
       .from('room_members')
       .select('*')
@@ -80,10 +106,12 @@ export default function StudentPage() {
       .single();
 
     if (existingMember) {
+      localStorage.setItem(`pixel_nickname_${selectedRoom.id}`, nickname.trim());
       router.push(`/student/${selectedRoom.id}`);
       return;
     }
 
+    // 加入房间
     const { error: joinError } = await supabase.from('room_members').insert({
       room_id: selectedRoom.id,
       user_id: user.id,
@@ -101,17 +129,38 @@ export default function StudentPage() {
       return;
     }
 
+    localStorage.setItem(`pixel_nickname_${selectedRoom.id}`, nickname.trim());
     router.push(`/student/${selectedRoom.id}`);
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0A0A0A]">
+        <p className="text-[#71717a]">检查登录状态...</p>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return null; // 会在 useEffect 中重定向
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-[#0A0A0A] p-8">
       <main className="w-full max-w-[500px]">
         {/* Header */}
-        <div className="pb-8 text-center" style={{ paddingTop: '120px' }}>
-          <h1 className="text-[28px] font-bold text-[#fafafa]" style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
-            欢迎加入课堂
-          </h1>
+        <div className="pb-4 text-center" style={{ paddingTop: '80px' }}>
+          <div className="flex items-center justify-between">
+            <h1 className="text-[24px] font-bold text-[#fafafa]" style={{ fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>
+              欢迎加入课堂
+            </h1>
+            <button
+              onClick={handleSignOut}
+              className="px-3 py-1.5 text-xs text-[#71717a] hover:text-[#fafafa]"
+            >
+              退出登录
+            </button>
+          </div>
         </div>
 
         {error && (

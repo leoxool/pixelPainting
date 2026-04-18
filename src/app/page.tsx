@@ -24,14 +24,14 @@ export default function Home() {
         {/* Buttons */}
         <div className="flex w-full max-w-[320px] flex-col gap-3">
           <Link
-            href="/student"
+            href="/login?redirect=/student"
             className="flex h-12 items-center justify-center rounded-full bg-[#cb1b1b] text-[#fafafa] font-medium transition-colors hover:opacity-90"
             style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500 }}
           >
             作为学生加入课堂
           </Link>
           <Link
-            href="/teacher"
+            href="/login?redirect=/teacher"
             className="flex h-12 items-center justify-center rounded-full border border-[#3f3f46] bg-transparent text-[#a1a1aa] font-medium transition-colors hover:border-zinc-500"
             style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500 }}
           >
