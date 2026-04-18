@@ -291,7 +291,7 @@ export function TeacherParticleCanvas({
             // Position at center of 2x2 block
             const x = (j0 + 1) * BRUSH_TEXTURE_SIZE;
             const y = (gridSizeY - (i0 + 1)) * BRUSH_TEXTURE_SIZE;
-            mesh.position.set(x, y, 0);
+            mesh.position.set(x, y, (hash(j0, i0, 4) - 0.5) * 0.001);
 
             sceneRef.current.add(mesh);
             meshesRef.current.push(mesh);
@@ -342,7 +342,7 @@ export function TeacherParticleCanvas({
 
               const x = j * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
               const y = (gridSizeY - i - 1) * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
-              mesh.position.set(x, y, 0);
+              mesh.position.set(x, y, (hash(j, i, 4) - 0.5) * 0.001);
 
               sceneRef.current.add(mesh);
               meshesRef.current.push(mesh);
@@ -390,7 +390,7 @@ export function TeacherParticleCanvas({
 
           const x = j * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
           const y = (gridSizeY - i - 1) * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
-          mesh.position.set(x, y, 0);
+          mesh.position.set(x, y, (hash(j, i, 4) - 0.5) * 0.001);
 
           sceneRef.current.add(mesh);
           meshesRef.current.push(mesh);
@@ -443,7 +443,7 @@ export function TeacherParticleCanvas({
 
             const x = (j0 + 1) * BRUSH_TEXTURE_SIZE;
             const y = (gridSizeY - i - 1) * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
-            mesh.position.set(x, y, 0);
+            mesh.position.set(x, y, (hash(j0, i, 4) - 0.5) * 0.001);
 
             sceneRef.current.add(mesh);
             meshesRef.current.push(mesh);
@@ -485,7 +485,7 @@ export function TeacherParticleCanvas({
 
               const x = jj * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
               const y = (gridSizeY - i - 1) * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
-              mesh.position.set(x, y, 0);
+              mesh.position.set(x, y, (hash(jj, i, 4) - 0.5) * 0.001);
 
               sceneRef.current.add(mesh);
               meshesRef.current.push(mesh);
@@ -530,7 +530,7 @@ export function TeacherParticleCanvas({
 
           const x = j * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
           const y = (gridSizeY - i - 1) * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
-          mesh.position.set(x, y, 0);
+          mesh.position.set(x, y, (hash(j, i, 4) - 0.5) * 0.001);
 
           sceneRef.current.add(mesh);
           meshesRef.current.push(mesh);
@@ -599,7 +599,7 @@ export function TeacherParticleCanvas({
           // Position at grid cell center
           const x = j * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
           const y = (gridSizeY - i - 1) * BRUSH_TEXTURE_SIZE + BRUSH_TEXTURE_SIZE / 2;
-          mesh.position.set(x, y, 0);
+          mesh.position.set(x, y, (hash(j, i, 4) - 0.5) * 0.001);
           mesh.rotation.z = rotation;
           if (flip) {
             mesh.scale.x = -1;
