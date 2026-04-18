@@ -45,6 +45,27 @@ export default function TeacherPage() {
     router.push('/login');
   };
 
+  const handleDeleteRoom = async (roomId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('确定要删除此教室吗？此操作不可恢复。')) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('rooms')
+      .delete()
+      .eq('id', roomId);
+
+    if (error) {
+      console.error('Error deleting room:', error);
+      alert('删除失败');
+      return;
+    }
+
+    fetchRooms();
+  };
+
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomName.trim() || !user) return;
@@ -147,29 +168,33 @@ export default function TeacherPage() {
             {rooms.length > 0 ? (
               <div className="flex-1 space-y-2 overflow-y-auto">
                 {rooms.map((room) => (
-                  <Link
+                  <div
                     key={room.id}
-                    href={`/teacher/${room.id}`}
                     className="flex h-14 items-center justify-between rounded-lg bg-[#1A1A1A] p-3 transition-colors hover:bg-[#27272a]"
                   >
-                    <div className="flex flex-col gap-1">
+                    <Link
+                      href={`/teacher/${room.id}`}
+                      className="flex flex-1 flex-col gap-1"
+                    >
                       <span className="font-medium text-[#fafafa] text-sm">
                         {room.name || 'Untitled Room'}
                       </span>
                       <span className="text-xs text-[#71717a]">
                         Code: {room.join_code}
                       </span>
+                    </Link>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => handleDeleteRoom(room.id, e)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/40 transition-colors"
+                        title="删除教室"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      room.status === 'active'
-                        ? 'bg-green-900/50 text-green-400'
-                        : room.status === 'completed'
-                        ? 'bg-zinc-700 text-zinc-400'
-                        : 'bg-yellow-900/50 text-yellow-400'
-                    }`}>
-                      {room.status === 'active' ? '进行中' : room.status === 'completed' ? '已完成' : '等待中'}
-                    </span>
-                  </Link>
+                  </div>
                 ))}
               </div>
             ) : (

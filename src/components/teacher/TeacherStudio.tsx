@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { TeacherParticleCanvas } from './TeacherParticleCanvas';
 
 type DataSource = 'webcam' | 'image';
@@ -67,7 +67,7 @@ function SyncSourceDisplay({ trigger, sourceImageData }: { trigger: number; sour
   return null;
 }
 
-export function TeacherStudio() {
+export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<string, unknown>, ref: React.Ref<{ importBrushStrip: (imageUrl: string) => Promise<void> }>) {
   const [activeTab, setActiveTab] = useState<TabType>('brushEdit');
   const [dataSource, setDataSource] = useState<DataSource>('webcam');
   const [isWebcamActive, setIsWebcamActive] = useState(false);
@@ -227,6 +227,51 @@ export function TeacherStudio() {
     const updated = brushPresets.filter(p => p.id !== id);
     saveBrushPresets(updated);
   }, [brushPresets, saveBrushPresets]);
+
+  // 从条带图导入笔刷（1000x100 切割成 10 个 100x100）
+  const importBrushStrip = useCallback(async (imageUrl: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const stripCanvas = document.createElement('canvas');
+        stripCanvas.width = 1000;
+        stripCanvas.height = 100;
+        const stripCtx = stripCanvas.getContext('2d');
+        if (!stripCtx) {
+          reject(new Error('Cannot create strip canvas context'));
+          return;
+        }
+        stripCtx.drawImage(img, 0, 0, 1000, 100);
+
+        const layers: (string | null)[] = [];
+        for (let i = 0; i < 10; i++) {
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = 100;
+          sliceCanvas.height = 100;
+          const sliceCtx = sliceCanvas.getContext('2d');
+          if (sliceCtx) {
+            sliceCtx.drawImage(stripCanvas, i * 100, 0, 100, 100, 0, 0, 100, 100);
+            layers.push(sliceCanvas.toDataURL('image/png'));
+          } else {
+            layers.push(null);
+          }
+        }
+
+        const preset: BrushPreset = {
+          id: `imported-${Date.now()}`,
+          name: `Imported ${new Date().toLocaleString()}`,
+          timestamp: Date.now(),
+          layers,
+        };
+
+        loadPresetToCanvas(preset);
+        resolve();
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = imageUrl;
+    });
+  }, [loadPresetToCanvas]);
 
   // 初始化笔触图层 (透明背景)
   const initBrushLayer = useCallback((index: number) => {
@@ -1031,6 +1076,48 @@ export function TeacherStudio() {
   const resetTransform = () => {
     setTransform({ scale: 1, x: 0, y: 0 });
   };
+
+  // 加载图片URL到源画布（用于应用学生提交的条带图）
+  const loadSourceImage = useCallback((imageUrl: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      stopRenderLoop();
+      setIsWebcamActive(false);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = sourceCanvasRef.current;
+        const ctx = sourceCtxRef.current;
+        if (!canvas || !ctx) {
+          reject(new Error('Canvas not available'));
+          return;
+        }
+
+        // 1000x100 条带图，缩放到 400x400
+        const canvasWidth = SOURCE_WIDTH;
+        const canvasHeight = SOURCE_HEIGHT;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvasWidth, canvasHeight);
+        sourceImageDataRef.current = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+
+        setDataSource('image');
+        setSourceAspectRatio(1);
+        setSourceResolution({ width: canvasWidth, height: canvasHeight });
+        setSourceUpdateTrigger(t => t + 1);
+        setActiveTab('renderOutput');
+        resolve();
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = imageUrl;
+    });
+  }, [stopRenderLoop]);
+
+  // Expose methods to parent components via ref
+  useImperativeHandle(ref, () => ({
+    importBrushStrip,
+    loadSourceImage,
+  }), [importBrushStrip, loadSourceImage]);
 
   useEffect(() => {
     return () => { stopRenderLoop(); };
@@ -1859,4 +1946,4 @@ export function TeacherStudio() {
       <SyncSourceDisplay trigger={sourceUpdateTrigger} sourceImageData={sourceImageDataRef.current} />
     </div>
   );
-}
+});

@@ -6,6 +6,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { Room } from '@/lib/supabase/types';
 
+const NICKNAME_LIST = [
+  '顾恺之', '吴道子', '王羲之', '张择端', '赵孟頫', '唐寅', '齐白石', '徐悲鸿', '张大千',
+  '达·芬奇', '米开朗基罗', '拉斐尔', '梵高', '莫奈', '毕加索', '伦勃朗',
+  '贝多芬', '肖邦', '卓别林', '黑泽明',
+  '孔子', '孟子', '老子', '庄子', '墨子', '荀子', '朱熹', '王阳明',
+  '苏格拉底', '柏拉图', '亚里士多德', '笛卡尔', '康德', '黑格尔', '尼采', '马克思', '叔本华', '萨特', '罗素', '伏尔泰',
+  '黄公望', '文徵明', '仇英', '石涛', '八大山人', '任伯年', '李可染', '傅抱石', '吴冠中', '林风眠', '刘海粟', '蒋兆和', '叶浅予', '潘天寿', '黄宾虹', '常玉', '陈逸飞', '罗中立', '梁启超', '冯友兰', '康有为', '章太炎', '王国维', '蔡元培',
+  '提香', '卡拉瓦乔', '鲁本斯', '委拉斯开兹', '戈雅', '透纳', '德拉克洛瓦', '库尔贝', '马奈', '德加', '雷诺阿', '塞尚', '高更', '修拉', '克里姆特', '蒙克', '马蒂斯', '布拉克', '莫迪利亚尼', '杜尚', '米罗', '夏加尔', '康定斯基', '保罗·克利', '蒙德里安', '达利', '马格里特', '埃舍尔', '培根', '安迪·沃霍尔', '波洛克', '罗斯科', '大卫·霍克尼', '弗里达·卡罗', '席勒'
+];
+
 export default function StudentPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [nickname, setNickname] = useState('');
@@ -169,21 +179,23 @@ export default function StudentPage() {
           </div>
         )}
 
-        {/* Nickname Input */}
+        {/* Nickname Select */}
         <div className="mb-6 flex flex-col gap-1">
           <label htmlFor="nickname" className="text-sm font-medium text-[#a1a1aa]" style={{ fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>
             你的昵称
           </label>
-          <input
+          <select
             id="nickname"
-            type="text"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
-            placeholder="给自己起个名字"
-            maxLength={20}
             disabled={!!selectedRoom}
-            className="h-12 w-full rounded-lg bg-[#1A1A1A] px-4 text-[#fafafa] placeholder-[#52525b] disabled:opacity-50"
-          />
+            className="h-12 w-full rounded-lg bg-[#1A1A1A] px-4 text-[#fafafa] disabled:opacity-50"
+          >
+            <option value="">选择你的名字</option>
+            {NICKNAME_LIST.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
         </div>
 
         {selectedRoom ? (
@@ -238,7 +250,7 @@ export default function StudentPage() {
             </h2>
             {!nickname.trim() ? (
               <p className="py-4 text-center text-sm text-[#71717a]">
-                请先输入昵称
+                请先选择昵称
               </p>
             ) : rooms.length > 0 ? (
               <div className="max-h-80 space-y-2 overflow-y-auto">
@@ -257,13 +269,6 @@ export default function StudentPage() {
                         {new Date(room.created_at).toLocaleTimeString()}
                       </span>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      room.status === 'active'
-                        ? 'bg-green-900/50 text-green-400'
-                        : 'bg-yellow-900/50 text-yellow-400'
-                    }`}>
-                      {room.status === 'active' ? '进行中' : '等待中'}
-                    </span>
                   </button>
                 ))}
               </div>

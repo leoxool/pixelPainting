@@ -24,6 +24,17 @@ export interface RoomMember {
   role: 'teacher' | 'student';
   nickname?: string;
   joined_at: string;
+  profile?: {
+    username: string;
+    display_name?: string;
+  };
+}
+
+export interface Profile {
+  id: string;
+  username: string;
+  display_name?: string;
+  role: 'teacher' | 'student';
 }
 
 export interface AssetMetadata {
