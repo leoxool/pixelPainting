@@ -30,7 +30,45 @@ interface GridCell {
 const SOURCE_WIDTH = 400;
 const SOURCE_HEIGHT = 400;
 
+type TabType = 'brushEdit' | 'renderOutput';
+
+// Component to sync display canvases with actual brush canvases
+function SyncDisplayCanvases({ trigger, brushLayers }: { trigger: number; brushLayers: (BrushLayer | null)[] }) {
+  useEffect(() => {
+    for (let i = 0; i < 10; i++) {
+      const displayCanvas = document.getElementById(`brush-display-canvas-${i}`) as HTMLCanvasElement;
+      const layer = brushLayers[i];
+      if (displayCanvas && layer?.canvas) {
+        const ctx = displayCanvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, 100, 100);
+          ctx.drawImage(layer.canvas, 0, 0);
+        }
+      }
+    }
+  }, [trigger, brushLayers]);
+  return null;
+}
+
+// Component to sync source display canvas with actual source canvas
+function SyncSourceDisplay({ trigger, sourceImageData }: { trigger: number; sourceImageData: ImageData | null }) {
+  useEffect(() => {
+    if (!sourceImageData) return;
+    const displayCanvas = document.getElementById('source-display-canvas') as HTMLCanvasElement;
+    if (displayCanvas) {
+      const ctx = displayCanvas.getContext('2d');
+      if (ctx) {
+        displayCanvas.width = sourceImageData.width;
+        displayCanvas.height = sourceImageData.height;
+        ctx.putImageData(sourceImageData, 0, 0);
+      }
+    }
+  }, [trigger, sourceImageData]);
+  return null;
+}
+
 export function TeacherStudio() {
+  const [activeTab, setActiveTab] = useState<TabType>('brushEdit');
   const [dataSource, setDataSource] = useState<DataSource>('webcam');
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [brushSize, setBrushSize] = useState(10);
@@ -69,6 +107,8 @@ export function TeacherStudio() {
   const [showBrushLibrary, setShowBrushLibrary] = useState(false);
   // 用于触发WebGL渲染器更新
   const [renderTrigger, setRenderTrigger] = useState(0);
+  // 用于触发笔刷缩略图更新
+  const [brushUpdateTrigger, setBrushUpdateTrigger] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -91,6 +131,9 @@ export function TeacherStudio() {
   const animationFrameRef = useRef<number | null>(null);
   const renderLoopRef = useRef<boolean>(false);
   const isWebcamActiveRef = useRef(false);
+  // 存储源图像数据用于持久化
+  const sourceImageDataRef = useRef<ImageData | null>(null);
+  const [sourceUpdateTrigger, setSourceUpdateTrigger] = useState(0);
 
   // 笔刷库：从 localStorage 加载
   const loadBrushPresets = useCallback(() => {
@@ -170,6 +213,7 @@ export function TeacherStudio() {
     });
     Promise.all(loadPromises).then(() => {
       setRenderTrigger(t => t + 1);
+      setBrushUpdateTrigger(t => t + 1);
       setCurrentPresetName(preset.name);
     });
   }, []);
@@ -184,6 +228,8 @@ export function TeacherStudio() {
   const initBrushLayer = useCallback((index: number) => {
     const canvas = brushCanvasesRef.current[index];
     if (!canvas) return;
+    // Skip if already initialized with content
+    if (brushLayersRef.current[index] && brushLayersRef.current[index].canvas === canvas) return;
     canvas.width = 100;
     canvas.height = 100;
     const ctx = canvas.getContext('2d');
@@ -655,8 +701,13 @@ export function TeacherStudio() {
 
         // 将原图缩放绘制到 canvas（读取完整原图，缩放到 canvas 尺寸）
         ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvasWidth, canvasHeight);
+
+        // 存储图像数据用于持久化
+        sourceImageDataRef.current = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+
         setDataSource('image');
         setSourceResolution({ width: canvasWidth, height: canvasHeight });
+        setSourceUpdateTrigger(t => t + 1);
       };
       img.src = event.target?.result as string;
     };
@@ -694,6 +745,7 @@ export function TeacherStudio() {
     editingLayerIndexRef.current = null;
     setEditingBrushIndex(null);
     setRenderTrigger(t => t + 1);
+    setBrushUpdateTrigger(t => t + 1);
   };
 
   const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
@@ -846,65 +898,53 @@ export function TeacherStudio() {
 
   return (
     <div className="flex h-full flex-col bg-[#09090b] text-[#fafafa]">
-      {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-[#27272a] bg-[#18181b] px-4">
-        <h1 className="text-sm font-bold">Teacher Studio</h1>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-[#27272a] px-2 py-1 text-xs">{gridSizeX}x{gridSizeY}</span>
-          <span className="rounded bg-[#27272a] px-2 py-1 text-xs">{sourceAspectRatio >= 1 ? 'Landscape' : 'Portrait'}</span>
-        </div>
+      {/* Tab Navigation */}
+      <div className="flex border-b border-[#27272a] bg-[#18181b]">
+        <button
+          onClick={() => { setActiveTab('brushEdit'); setBrushUpdateTrigger(t => t + 1); }}
+          className={`px-6 py-3 text-sm font-medium transition-colors ${
+            activeTab === 'brushEdit'
+              ? 'text-white border-b-2 border-blue-500'
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          笔刷编辑
+        </button>
+        <button
+          onClick={() => { setActiveTab('renderOutput'); setSourceUpdateTrigger(t => t + 1); }}
+          className={`px-6 py-3 text-sm font-medium transition-colors ${
+            activeTab === 'renderOutput'
+              ? 'text-white border-b-2 border-blue-500'
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          渲染输出
+        </button>
       </div>
 
-      {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Panel */}
-        <div className="flex w-64 flex-shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#27272a] bg-[#18181b] p-3">
-          {/* Data Source */}
-          <div>
-            <div className="mb-2 flex gap-1">
-              <button
-                onClick={() => { setDataSource('webcam'); startWebcam(); }}
-                disabled={isWebcamActive}
-                className={`rounded px-2 py-1 text-xs ${dataSource === 'webcam' && isWebcamActive ? 'bg-green-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'}`}
-              >
-                摄像头
-              </button>
-              <button
-                onClick={() => { stopWebcam(); setDataSource('image'); }}
-                className={`rounded px-2 py-1 text-xs ${dataSource === 'image' ? 'bg-blue-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'}`}
-              >
-                图片
-              </button>
-            </div>
-            {dataSource === 'image' && (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="text-xs text-zinc-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-600 file:text-white file:text-xs hover:file:bg-blue-700 mb-2 w-full"
-              />
-            )}
-            <div className="relative w-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-700" style={{ aspectRatio: sourceAspectRatio }}>
-              <canvas ref={sourceCanvasRef} className="absolute inset-0 w-full h-full object-contain" />
-              <video ref={videoRef} className={`absolute inset-0 w-full h-full object-cover transition-opacity ${dataSource === 'webcam' ? 'opacity-100' : 'opacity-0'}`} playsInline muted />
-            </div>
-          </div>
-
-          {/* Brush Thumbnails */}
-          <div>
-            <div className="flex flex-wrap gap-1">
+      {/* Tab Content */}
+      {activeTab === 'brushEdit' ? (
+        /* Brush Edit Tab */
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="text-center">
+            <div className="text-zinc-500 text-sm mb-4">点击笔触缩略图进行编辑</div>
+            {/* Large Preview of all brush layers with gray reference bars */}
+            <div className="inline-flex gap-3 p-6 bg-zinc-800 rounded-lg">
               {Array.from({ length: 10 }).map((_, index) => (
-                <div key={index} className="flex flex-col items-center">
-                  <span
-                    className="text-[8px] px-1 rounded mb-0.5"
-                    style={{ backgroundColor: getLevelGray(index), color: index > 5 ? '#fff' : '#000' }}
-                  >
-                    {index}
-                  </span>
+                <div
+                  key={`brush-display-${index}-${brushUpdateTrigger}`}
+                  className="flex flex-col items-center cursor-pointer"
+                  onClick={() => openBrushEditor(index)}
+                >
+                  {/* Gray reference bar - same width as thumbnail, 20px height, no number */}
+                  <div
+                    className="w-16 rounded mb-1"
+                    style={{ backgroundColor: getLevelGray(index), height: '20px' }}
+                  />
+                  {/* Display canvas copy */}
                   <canvas
-                    ref={(el) => { brushCanvasesRef.current[index] = el; }}
-                    onClick={() => openBrushEditor(index)}
-                    className="w-6 h-6 border border-zinc-600 rounded cursor-pointer hover:border-blue-500"
+                    id={`brush-display-canvas-${index}`}
+                    className="w-16 h-16 border border-zinc-600 rounded hover:border-blue-500"
                     width={100}
                     height={100}
                     style={{ backgroundColor: 'transparent' }}
@@ -912,236 +952,362 @@ export function TeacherStudio() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-1 mt-2">
-              <button onClick={() => setShowBrushLibrary(true)} className="flex-1 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs">
+            <div className="mt-4 flex justify-center gap-2">
+              <button onClick={resetAllBrushes} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-xs">
+                重置
+              </button>
+              <button onClick={() => setShowBrushLibrary(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs">
                 笔刷库
               </button>
-              <button onClick={resetAllBrushes} className="flex-1 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs">
-                重置
+              <button onClick={() => setActiveTab('renderOutput')} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-xs">
+                切换到渲染输出
               </button>
             </div>
           </div>
         </div>
-
-        {/* Right Panel - Output */}
-        <div className="flex-1 flex flex-col p-3">
-          {/* Output status + fullscreen */}
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs text-zinc-500">
-              {isWebcamActive ? '实时' : '静止'} · {sourceAspectRatio >= 1 ? '横版' : '竖版'}
-            </span>
-            {!isFullscreen && (
-              <button
-                onClick={() => { setIsFullscreen(true); resetTransform(); }}
-                className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
-                </svg>
-                全屏
-              </button>
-            )}
-          </div>
-
-          {/* Background Color Setting */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-zinc-500">背景色:</span>
-            <input
-              type="color"
-              value={canvasBackgroundColor}
-              onChange={(e) => setCanvasBackgroundColor(e.target.value)}
-              className="w-6 h-6 rounded border border-zinc-600 cursor-pointer"
-            />
-          </div>
-
-          {/* Output Canvas Container - WebGL */}
-          <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-            {/* Canvas wrapper with transform */}
-            <div
-              className={`rounded-lg overflow-hidden ${isFullscreen ? 'fixed inset-0 z-40 flex items-center justify-center' : 'max-w-[600px] w-full h-auto bg-white'}`}
-              style={isFullscreen ? { cursor: isPanning ? 'grabbing' : 'grab', backgroundColor: '#ececec' } : { aspectRatio: sourceAspectRatio }}
-            >
-              <div
-                style={{
-                  transform: isFullscreen ? `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` : 'none',
-                  transformOrigin: 'center center',
-                  transition: isPanning ? 'none' : 'transform 0.1s ease-out'
-                }}
-              >
-                <TeacherParticleCanvas
-                  sourceWidth={sourceResolution.width}
-                  sourceHeight={sourceResolution.height}
-                  gridSizeX={gridSizeX}
-                  gridSizeY={gridSizeY}
-                  brushLayers={brushLayersRef.current}
-                  sourceCanvas={sourceCanvasRef.current}
-                  sizeJitter={sizeJitter}
-                  rotationJitter={rotationJitter}
-                  enableFlip={enableFlip}
-                  enableMergeOptimization={enableMergeOptimization}
-                  backgroundColor={canvasBackgroundColor}
-                  isFullscreen={isFullscreen}
-                  transform={transform}
-                  onTransformChange={setTransform}
-                  onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
-                  onMouseUp={handleMouseUp}
-                  updateTrigger={renderTrigger}
-                />
-              </div>
-            </div>
-
-            {/* Zoom indicator in fullscreen */}
-            {isFullscreen && (
-              <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3 py-1 bg-zinc-800/80 rounded-lg text-sm">
-                滚轮缩放 | 拖拽平移 | 当前缩放: {Math.round(transform.scale * 100)}%
-              </div>
-            )}
-
-            {/* Floating Settings Panel in fullscreen */}
-            {isFullscreen && (
-              <div className="fixed top-4 left-4 z-50">
+      ) : (
+        /* Render Output Tab */
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left Panel - Data Source */}
+          <div className="flex w-64 flex-shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#27272a] bg-[#18181b] p-3">
+            {/* Data Source */}
+            <div>
+              <div className="mb-2 flex gap-1">
                 <button
-                  onClick={() => setShowSettingsPanel(!showSettingsPanel)}
-                  className="p-3 bg-zinc-800/80 hover:bg-zinc-700 rounded-lg text-white transition-colors"
-                  title="设置"
+                  onClick={() => { setDataSource('webcam'); startWebcam(); }}
+                  disabled={isWebcamActive}
+                  className={`rounded px-2 py-1 text-xs ${dataSource === 'webcam' && isWebcamActive ? 'bg-green-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'}`}
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
+                  摄像头
                 </button>
+                <button
+                  onClick={() => { stopWebcam(); setDataSource('image'); }}
+                  className={`rounded px-2 py-1 text-xs ${dataSource === 'image' ? 'bg-blue-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'}`}
+                >
+                  图片
+                </button>
+              </div>
+              {dataSource === 'image' && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="text-xs text-zinc-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-600 file:text-white file:text-xs hover:file:bg-blue-700 mb-2 w-full"
+                />
+              )}
+              <div className="relative w-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-700" style={{ aspectRatio: sourceAspectRatio }}>
+                <canvas id="source-display-canvas" className="absolute inset-0 w-full h-full object-contain" />
+                <video ref={videoRef} className={`absolute inset-0 w-full h-full object-cover transition-opacity ${dataSource === 'webcam' ? 'opacity-100' : 'opacity-0'}`} playsInline muted />
+              </div>
+            </div>
 
-                {/* Expandable Settings Panel */}
-                {showSettingsPanel && (
-                  <div className="mt-2 w-72 bg-zinc-800/95 backdrop-blur rounded-lg p-4 shadow-xl border border-zinc-700">
-                    <h3 className="text-sm font-semibold mb-3 text-zinc-300">采样精度</h3>
-                    <div className="mb-4">
-                      <label className="text-xs text-zinc-400 flex justify-between">
-                        <span>网格采样</span>
-                        <span>{gridSamplingSize}px</span>
-                      </label>
-                      <input
-                        type="range"
-                        min="5"
-                        max="30"
-                        step="1"
-                        value={gridSamplingSize}
-                        onChange={(e) => setGridSamplingSize(Number(e.target.value))}
-                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                      />
-                      <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
-                        <span>精细</span>
-                        <span>粗糙</span>
-                      </div>
-                    </div>
+            {/* Brush Library Button */}
+            <button
+              onClick={() => setShowBrushLibrary(true)}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
+              笔刷库
+            </button>
 
-                    <h3 className="text-sm font-semibold mb-3 text-zinc-300">笔触效果</h3>
-                    <div className="space-y-3">
-                      <div>
+            {/* Settings Panel */}
+            <div className="mt-4 space-y-4">
+              <h3 className="text-xs font-semibold text-zinc-300">采样精度</h3>
+              <div className="mb-4">
+                <label className="text-xs text-zinc-400 flex justify-between">
+                  <span>网格采样</span>
+                  <span>{gridSamplingSize}px</span>
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="30"
+                  step="1"
+                  value={gridSamplingSize}
+                  onChange={(e) => setGridSamplingSize(Number(e.target.value))}
+                  className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+                />
+                <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                  <span>精细</span>
+                  <span>粗糙</span>
+                </div>
+              </div>
+
+              <h3 className="text-xs font-semibold text-zinc-300">笔触效果</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-zinc-400 flex justify-between">
+                    <span>大小抖动</span>
+                    <span>{sizeJitter}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={sizeJitter}
+                    onChange={(e) => setSizeJitter(Number(e.target.value))}
+                    className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 flex justify-between">
+                    <span>旋转抖动</span>
+                    <span>{Math.round(rotationJitter)}°</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="90"
+                    step="1"
+                    value={rotationJitter}
+                    onChange={(e) => setRotationJitter(Number(e.target.value))}
+                    className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableFlip}
+                    onChange={(e) => setEnableFlip(e.target.checked)}
+                    className="w-3 h-3 rounded border-zinc-600"
+                  />
+                  <span>随机翻转</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableMergeOptimization}
+                    onChange={(e) => setEnableMergeOptimization(e.target.checked)}
+                    className="w-3 h-3 rounded border-zinc-600"
+                  />
+                  <span>笔触合并优化</span>
+                </label>
+
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">
+                  <span className="text-xs text-zinc-400">背景色</span>
+                  <input
+                    type="color"
+                    value={canvasBackgroundColor}
+                    onChange={(e) => setCanvasBackgroundColor(e.target.value)}
+                    className="w-6 h-6 rounded border border-zinc-600 cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Panel - Output */}
+          <div className="flex-1 flex flex-col p-3">
+            {/* Output status + fullscreen */}
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs text-zinc-500">
+                {isWebcamActive ? '实时' : '静止'} · {sourceAspectRatio >= 1 ? '横版' : '竖版'}
+              </span>
+              {!isFullscreen && (
+                <button
+                  onClick={() => { setIsFullscreen(true); resetTransform(); }}
+                  className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                  全屏
+                </button>
+              )}
+            </div>
+
+            {/* Output Canvas Container - WebGL */}
+            <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+              {/* Canvas wrapper with transform */}
+              <div
+                className={`rounded-lg overflow-hidden ${isFullscreen ? 'fixed inset-0 z-40 flex items-center justify-center' : 'max-w-[600px] w-full h-auto bg-white'}`}
+                style={isFullscreen ? { cursor: isPanning ? 'grabbing' : 'grab', backgroundColor: '#ececec' } : { aspectRatio: sourceAspectRatio }}
+              >
+                <div
+                  style={{
+                    transform: isFullscreen ? `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` : 'none',
+                    transformOrigin: 'center center',
+                    transition: isPanning ? 'none' : 'transform 0.1s ease-out'
+                  }}
+                >
+                  <TeacherParticleCanvas
+                    sourceWidth={sourceResolution.width}
+                    sourceHeight={sourceResolution.height}
+                    gridSizeX={gridSizeX}
+                    gridSizeY={gridSizeY}
+                    brushLayers={brushLayersRef.current}
+                    sourceCanvas={sourceCanvasRef.current}
+                    sizeJitter={sizeJitter}
+                    rotationJitter={rotationJitter}
+                    enableFlip={enableFlip}
+                    enableMergeOptimization={enableMergeOptimization}
+                    backgroundColor={canvasBackgroundColor}
+                    isFullscreen={isFullscreen}
+                    transform={transform}
+                    onTransformChange={setTransform}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    updateTrigger={renderTrigger}
+                  />
+                </div>
+              </div>
+
+              {/* Zoom indicator in fullscreen */}
+              {isFullscreen && (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3 py-1 bg-zinc-800/80 rounded-lg text-sm">
+                  滚轮缩放 | 拖拽平移 | 当前缩放: {Math.round(transform.scale * 100)}%
+                </div>
+              )}
+
+              {/* Floating Settings Panel in fullscreen */}
+              {isFullscreen && (
+                <div className="fixed top-4 left-4 z-50">
+                  <button
+                    onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+                    className="p-3 bg-zinc-800/80 hover:bg-zinc-700 rounded-lg text-white transition-colors"
+                    title="设置"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                  </button>
+
+                  {/* Expandable Settings Panel */}
+                  {showSettingsPanel && (
+                    <div className="mt-2 w-72 bg-zinc-800/95 backdrop-blur rounded-lg p-4 shadow-xl border border-zinc-700">
+                      <h3 className="text-sm font-semibold mb-3 text-zinc-300">采样精度</h3>
+                      <div className="mb-4">
                         <label className="text-xs text-zinc-400 flex justify-between">
-                          <span>大小抖动</span>
-                          <span>{sizeJitter}</span>
+                          <span>网格采样</span>
+                          <span>{gridSamplingSize}px</span>
                         </label>
                         <input
                           type="range"
-                          min="0"
-                          max="100"
+                          min="5"
+                          max="30"
                           step="1"
-                          value={sizeJitter}
-                          onChange={(e) => setSizeJitter(Number(e.target.value))}
+                          value={gridSamplingSize}
+                          onChange={(e) => setGridSamplingSize(Number(e.target.value))}
                           className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
                         />
+                        <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                          <span>精细</span>
+                          <span>粗糙</span>
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-xs text-zinc-400 flex justify-between">
-                          <span>旋转抖动</span>
-                          <span>{Math.round(rotationJitter)}°</span>
-                        </label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="90"
-                          step="1"
-                          value={rotationJitter}
-                          onChange={(e) => setRotationJitter(Number(e.target.value))}
-                          className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enableFlip}
-                          onChange={(e) => setEnableFlip(e.target.checked)}
-                          className="w-3 h-3 rounded border-zinc-600"
-                        />
-                        <span>随机翻转</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enableMergeOptimization}
-                          onChange={(e) => setEnableMergeOptimization(e.target.checked)}
-                          className="w-3 h-3 rounded border-zinc-600"
-                        />
-                        <span>笔触合并优化</span>
-                      </label>
 
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">
-                        <span className="text-xs text-zinc-400">背景色</span>
-                        <input
-                          type="color"
-                          value={canvasBackgroundColor}
-                          onChange={(e) => setCanvasBackgroundColor(e.target.value)}
-                          className="w-6 h-6 rounded border border-zinc-600 cursor-pointer"
-                        />
+                      <h3 className="text-sm font-semibold mb-3 text-zinc-300">笔触效果</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs text-zinc-400 flex justify-between">
+                            <span>大小抖动</span>
+                            <span>{sizeJitter}</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={sizeJitter}
+                            onChange={(e) => setSizeJitter(Number(e.target.value))}
+                            className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 flex justify-between">
+                            <span>旋转抖动</span>
+                            <span>{Math.round(rotationJitter)}°</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="90"
+                            step="1"
+                            value={rotationJitter}
+                            onChange={(e) => setRotationJitter(Number(e.target.value))}
+                            className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={enableFlip}
+                            onChange={(e) => setEnableFlip(e.target.checked)}
+                            className="w-3 h-3 rounded border-zinc-600"
+                          />
+                          <span>随机翻转</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={enableMergeOptimization}
+                            onChange={(e) => setEnableMergeOptimization(e.target.checked)}
+                            className="w-3 h-3 rounded border-zinc-600"
+                          />
+                          <span>笔触合并优化</span>
+                        </label>
+
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">
+                          <span className="text-xs text-zinc-400">背景色</span>
+                          <input
+                            type="color"
+                            value={canvasBackgroundColor}
+                            onChange={(e) => setCanvasBackgroundColor(e.target.value)}
+                            className="w-6 h-6 rounded border border-zinc-600 cursor-pointer"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Fullscreen controls - top right, OUTSIDE the canvas container */}
+            {isFullscreen && (
+              <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+                <button
+                  onClick={resetTransform}
+                  className="px-3 py-2 bg-zinc-800/80 hover:bg-zinc-700 rounded-lg text-sm"
+                >
+                  重置
+                </button>
+                <button
+                  onClick={() => { setIsFullscreen(false); resetTransform(); }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  退出
+                </button>
+              </div>
+            )}
+
+            {/* Action buttons - below canvas */}
+            {!isFullscreen && (
+              <div className="flex justify-end gap-2 mt-2">
+                <button onClick={renderArt} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs">
+                  刷新
+                </button>
+                <button onClick={() => {
+                  const link = document.createElement('a');
+                  link.download = 'mosaic-art.png';
+                  link.href = outputCanvasRef.current?.toDataURL() || '';
+                  link.click();
+                }} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs">
+                  下载
+                </button>
               </div>
             )}
           </div>
-
-          {/* Fullscreen controls - top right, OUTSIDE the canvas container */}
-          {isFullscreen && (
-            <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-              <button
-                onClick={resetTransform}
-                className="px-3 py-2 bg-zinc-800/80 hover:bg-zinc-700 rounded-lg text-sm"
-              >
-                重置
-              </button>
-              <button
-                onClick={() => { setIsFullscreen(false); resetTransform(); }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-                退出
-              </button>
-            </div>
-          )}
-
-          {/* Action buttons - below canvas */}
-          {!isFullscreen && (
-            <div className="flex justify-end gap-2 mt-2">
-              <button onClick={renderArt} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs">
-                刷新
-              </button>
-              <button onClick={() => {
-                const link = document.createElement('a');
-                link.download = 'mosaic-art.png';
-                link.href = outputCanvasRef.current?.toDataURL() || '';
-                link.click();
-              }} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs">
-                下载
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Brush Edit Modal */}
       {editingBrushIndex !== null && (
@@ -1467,6 +1633,30 @@ export function TeacherStudio() {
           </div>
         </div>
       )}
+
+      {/* Persistent Brush Canvases - Always rendered, never unmounted */}
+      <div className="hidden">
+        {Array.from({ length: 10 }).map((_, index) => (
+          <canvas
+            key={`persistent-brush-${index}`}
+            ref={(el) => { brushCanvasesRef.current[index] = el; }}
+            width={100}
+            height={100}
+          />
+        ))}
+        {/* Persistent Source Canvas */}
+        <canvas
+          ref={(el) => { sourceCanvasRef.current = el; if (el && sourceCtxRef.current === null) { sourceCtxRef.current = el.getContext('2d'); } }}
+          width={SOURCE_WIDTH}
+          height={SOURCE_HEIGHT}
+        />
+      </div>
+
+      {/* Sync display canvases with actual brush canvases */}
+      <SyncDisplayCanvases trigger={brushUpdateTrigger} brushLayers={brushLayersRef.current} />
+
+      {/* Sync source display canvas */}
+      <SyncSourceDisplay trigger={sourceUpdateTrigger} sourceImageData={sourceImageDataRef.current} />
     </div>
   );
 }
