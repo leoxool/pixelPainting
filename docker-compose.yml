@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  pixel:
+    build: .
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL=https://wddmprnwalpcaowlxcph.supabase.co
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_mq-MOMx3mj720iwzwKR0Fw_5TFA9t1S
