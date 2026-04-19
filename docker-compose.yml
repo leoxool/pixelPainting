@@ -1,10 +1,188 @@
 version: '3.8'
+
 services:
+  # Next.js 应用
   pixel:
     build: .
     restart: always
     ports:
       - "3000:3000"
+    depends_on:
+      - kong
     environment:
-      - NEXT_PUBLIC_SUPABASE_URL=https://wddmprnwalpcaowlxcph.supabase.co
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_mq-MOMx3mj720iwzwKR0Fw_5TFA9t1S
+      - NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    networks:
+      - supabase_network
+
+  # API Gateway (Kong)
+  kong:
+    image: kong:3.4
+    restart: always
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    volumes:
+      - ./supabase/config/kong.yml:/var/lib/kong/kong.yml:ro
+    networks:
+      - supabase_network
+
+  # PostgreSQL 数据库
+  postgres:
+    image: supabase/postgres:15.6.1.147
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - supabase_network
+
+  # PostgREST (SQL API)
+  postgrest:
+    image: postgrest/postgrest:12.0.2
+    restart: always
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - postgres
+    networks:
+      - supabase_network
+
+  # GoTrue (Auth)
+  gotrue:
+    image: supabase/gotrue:v2.149.0
+    restart: always
+    ports:
+      - "9999:9999"
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:8000
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/gotrue
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRESSLUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: ""
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+    depends_on:
+      - postgres
+    networks:
+      - supabase_network
+
+  # Realtime (WebSocket)
+  realtime:
+    image: supabase/realtime:2.30.23
+    restart: always
+    ports:
+      - "6544:6544"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${JWT_SECRET}
+      FLY_ALLOC_ID: fly123
+      FLY_APP_NAME: realtime
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      ERL_AFLAGS: -proto_dist inet_tcp
+      ENABLE_TAILSCALE: "false"
+      DNS_NODES: "''"
+    depends_on:
+      - postgres
+    networks:
+      - supabase_network
+
+  # Storage API
+  storage:
+    image: supabase/storage-api:1.11.7
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://postgrest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+    volumes:
+      - storage_data:/var/lib/storage
+    depends_on:
+      - postgres
+      - postgrest
+    networks:
+      - supabase_network
+
+  # Supabase Studio (Web UI for management)
+  studio:
+    image: supabase/studio:20241028-91ddbad
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      SUPABASE_URL: http://kong:8000
+      STUDIO_PG_META_URL: http://meta:8080
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+    depends_on:
+      - kong
+    networks:
+      - supabase_network
+
+  # PostgreSQL Meta (for Studio)
+  meta:
+    image: supabase/postgres-meta:v0.83.2
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: postgres
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
+    networks:
+      - supabase_network
+
+volumes:
+  postgres_data:
+  storage_data:
+
+networks:
+  supabase_network:
+    driver: bridge
