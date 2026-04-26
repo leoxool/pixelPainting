@@ -107,14 +107,24 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    // Try getUser() first, fall back to getSession() if network fails
+    let userObj = null;
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user) {
+      userObj = userData.user;
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.user) {
+        userObj = sessionData.user;
+      }
+    }
+    if (!userObj) return;
 
     await supabase
       .from('room_members')
       .delete()
       .eq('room_id', room.id)
-      .eq('user_id', user.id);
+      .eq('user_id', userObj.id);
 
     window.location.href = '/teacher';
   };

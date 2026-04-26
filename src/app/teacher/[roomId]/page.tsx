@@ -12,9 +12,15 @@ export default async function TeacherRoomPage({ params }: RoomPageProps) {
   const { roomId } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Try getUser() first, fall back to getSession() if network fails
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  let user = userData?.user;
+
+  if (!user && userError) {
+    // getUser() failed due to network error, try getSession() as fallback
+    const { data: sessionData } = await supabase.auth.getSession();
+    user = sessionData?.user;
+  }
 
   if (!user) {
     redirect('/login');

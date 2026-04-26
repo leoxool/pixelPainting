@@ -27,9 +27,19 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
   // Initialize Supabase client and user
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
+      // Try getUser() first, fall back to getSession() if network fails
+      let userObj = null;
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user) {
+        userObj = userData.user;
+      } else {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.user) {
+          userObj = sessionData.user;
+        }
+      }
+      if (userObj) {
+        setUserId(userObj.id);
       }
     };
     getUser();

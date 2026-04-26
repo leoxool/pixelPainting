@@ -1,5 +1,35 @@
 export type RoomStatus = 'waiting' | 'active' | 'paused' | 'completed';
 
+// Single Brush types
+export interface SingleBrush {
+  id: string;
+  user_id: string;
+  name: string;
+  category: string;
+  image_data: string;  // base64 PNG
+  thumbnail_data: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BrushCategory {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  created_at: string;
+}
+
+// Brush Group (原有预设概念，10个槽位)
+export interface BrushGroup {
+  id: string;
+  name: string;
+  timestamp: number;
+  layers: (string | null)[];  // base64 image data for each layer (10 slots)
+}
+
 export interface RoomConfig {
   gridWidth: number;
   gridHeight: number;
@@ -70,6 +100,16 @@ export interface Database {
         Row: Asset;
         Insert: Omit<Asset, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<Asset, 'id' | 'room_id' | 'student_id' | 'created_at'>>;
+      };
+      single_brushes: {
+        Row: SingleBrush;
+        Insert: Omit<SingleBrush, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<SingleBrush, 'id' | 'user_id' | 'created_at'>>;
+      };
+      brush_categories: {
+        Row: BrushCategory;
+        Insert: Omit<BrushCategory, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<BrushCategory, 'id' | 'user_id' | 'created_at'>>;
       };
     };
     Enums: {

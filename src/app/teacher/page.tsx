@@ -17,12 +17,23 @@ export default function TeacherPage() {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Try getUser() first, fall back to getSession() if network fails
+      let userObj = null;
+      const { data: userData, error } = await supabase.auth.getUser();
+      if (userData?.user) {
+        userObj = userData.user;
+      } else {
+        // getUser() failed (network error), try getSession() as fallback
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.user) {
+          userObj = sessionData.user;
+        }
+      }
+      if (!userObj) {
         router.push('/login');
         return;
       }
-      setUser({ email: user.email || '', id: user.id });
+      setUser({ email: userObj.email || '', id: userObj.id });
       fetchRooms();
     };
     getUser();

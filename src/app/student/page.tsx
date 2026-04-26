@@ -34,8 +34,19 @@ export default function StudentPage() {
 
   const checkUser = async () => {
     setIsCheckingAuth(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    // Try getUser() first, fall back to getSession() if network fails
+    let userObj = null;
+    const { data: userData, error } = await supabase.auth.getUser();
+    if (userData?.user) {
+      userObj = userData.user;
+    } else {
+      // getUser() failed (network error), try getSession() as fallback
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.user) {
+        userObj = sessionData.user;
+      }
+    }
+    if (userObj) {
       setIsSignedIn(true);
       fetchRooms();
     } else {
@@ -65,9 +76,18 @@ export default function StudentPage() {
 
   const handleSignOut = async () => {
     // 清除会话令牌
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.rpc('clear_session_token', { p_user_id: user.id });
+    let userObj = null;
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user) {
+      userObj = userData.user;
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.user) {
+        userObj = sessionData.user;
+      }
+    }
+    if (userObj) {
+      await supabase.rpc('clear_session_token', { p_user_id: userObj.id });
     }
     localStorage.removeItem('pixel_session_id');
     await supabase.auth.signOut();
@@ -100,8 +120,18 @@ export default function StudentPage() {
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    // 检查用户状态
+    let userObj = null;
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user) {
+      userObj = userData.user;
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.user) {
+        userObj = sessionData.user;
+      }
+    }
+    if (!userObj) {
       setError('请先登录');
       setIsLoading(false);
       return;
@@ -112,7 +142,7 @@ export default function StudentPage() {
       .from('room_members')
       .select('*')
       .eq('room_id', selectedRoom.id)
-      .eq('user_id', user.id)
+      .eq('user_id', userObj.id)
       .single();
 
     if (existingMember) {
@@ -124,7 +154,7 @@ export default function StudentPage() {
     // 加入房间
     const { error: joinError } = await supabase.from('room_members').insert({
       room_id: selectedRoom.id,
-      user_id: user.id,
+      user_id: userObj.id,
       role: 'student',
       nickname: nickname.trim(),
     } as any);

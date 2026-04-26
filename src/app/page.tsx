@@ -13,6 +13,8 @@ export default function Home() {
               src="/s.png"
               alt="Pixel Mosaic Logo"
               fill
+              sizes="250px"
+              loading="eager"
               className="object-cover"
             />
           </div>
