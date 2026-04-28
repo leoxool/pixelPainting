@@ -19,7 +19,7 @@ export default async function TeacherRoomPage({ params }: RoomPageProps) {
   if (!user && userError) {
     // getUser() failed due to network error, try getSession() as fallback
     const { data: sessionData } = await supabase.auth.getSession();
-    user = sessionData?.user;
+    user = sessionData?.session?.user ?? null;
   }
 
   if (!user) {

@@ -9,6 +9,26 @@ _services:
           - /rest/v1/
     plugins:
       - name: cors
+        config:
+          origins:
+            - "https://teacherliliang.xyz"
+            - "https://studio.teacherliliang.xyz"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Accept
+            - Authorization
+            - Content-Type
+            - Prefer
+          exposed_headers:
+            - X-total-count
+          credentials: true
+          max_age: 3600
   - name: gotrue
     url: http://gotrue:9999/
     routes:

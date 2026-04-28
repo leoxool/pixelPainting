@@ -50,8 +50,8 @@ export async function updateSession(request: NextRequest) {
   if (authError && !user) {
     console.warn('getUser() failed, trying getSession() as fallback:', authError);
     const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData?.user) {
-      sessionUser = sessionData.user;
+    if (sessionData?.session?.user) {
+      sessionUser = sessionData.session?.user;
       hasAuthError = false; // Clear error since we got session from cookie
       console.log('Using session from cookie fallback, role:', sessionUser.user_metadata?.role);
     }

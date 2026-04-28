@@ -114,8 +114,8 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
       userObj = userData.user;
     } else {
       const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData?.user) {
-        userObj = sessionData.user;
+      if (sessionData?.session?.user) {
+        userObj = sessionData.session?.user;
       }
     }
     if (!userObj) return;

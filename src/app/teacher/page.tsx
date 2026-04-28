@@ -25,8 +25,8 @@ export default function TeacherPage() {
       } else {
         // getUser() failed (network error), try getSession() as fallback
         const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData?.user) {
-          userObj = sessionData.user;
+        if (sessionData?.session?.user) {
+          userObj = sessionData.session?.user;
         }
       }
       if (!userObj) {

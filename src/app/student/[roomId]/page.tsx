@@ -34,8 +34,8 @@ export default function StudentRoomPage({ params }: StudentRoomPageProps) {
         userObj = userData.user;
       } else {
         const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData?.user) {
-          userObj = sessionData.user;
+        if (sessionData?.session?.user) {
+          userObj = sessionData.session.user ?? null;
         }
       }
       if (userObj) {
