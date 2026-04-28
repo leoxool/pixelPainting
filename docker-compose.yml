@@ -1,5 +1,3 @@
-version: '3.8'
-
 name: supabase
 
 services:
@@ -40,10 +38,7 @@ services:
     image: kong/kong:3.9.1
     restart: unless-stopped
     networks:
-      default:
-        aliases:
-          - api-gw
-      supabase_network:
+      - supabase_network
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 5s
@@ -56,14 +51,14 @@ services:
       - ${KONG_HTTP_PORT:-8001}:8000/tcp
       - ${KONG_HTTPS_PORT:-8443}:8443/tcp
     volumes:
-      - ./volumes/api/kong.yml:/var/lib/kong/kong.yml:ro,z
-      - ./volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro,z
+      - ./volumes/api/kong.yml:/var/lib/kong/kong.yml:rw,z
+
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_DNS_NOT_FOUND_TTL: 1
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction,post-function
+      KONG_PLUGINS: request-transformer,cors,acl,basic-auth,request-termination,ip-restriction,post-function
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
       KONG_PROXY_ACCESS_LOG: /dev/stdout combined
@@ -75,7 +70,6 @@ services:
       SERVICE_ROLE_KEY_ASYMMETRIC: ${SERVICE_ROLE_KEY_ASYMMETRIC:-}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
-    entrypoint: /home/kong/kong-entrypoint.sh
 
   # GoTrue (Auth) - 端口 9999
   auth:
