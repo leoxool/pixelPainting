@@ -76,17 +76,8 @@ export default function LoginPage() {
       return;
     }
 
-    // 3. 检查是否有其他设备登录（会话令牌验证）
+    // 3. 生成新会话令牌（会自动使旧设备失效）
     const newToken = crypto.randomUUID();
-    if (stored_token !== null) {
-      // 已有会话，检查是否相同浏览器（通过 localStorage sessionId 判断）
-      const browserSessionId = localStorage.getItem('pixel_session_id');
-      if (browserSessionId && browserSessionId !== stored_token) {
-        setError('该账户已在其他设备登录，请先退出后再试');
-        setIsLoading(false);
-        return;
-      }
-    }
 
     // 4. 使用邮箱登录
     console.log('4. Signing in with email:', email);

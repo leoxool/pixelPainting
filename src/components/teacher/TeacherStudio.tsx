@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { TeacherParticleCanvas } from './TeacherParticleCanvas';
+import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset } from '@/lib/db';
+import JSZip from 'jszip';
 
 type DataSource = 'webcam' | 'image';
 type BrushMode = 'draw' | 'erase';
@@ -29,6 +31,7 @@ interface GridCell {
 
 const SOURCE_WIDTH = 400;
 const SOURCE_HEIGHT = 400;
+const BRUSH_SIZE = 200;
 
 type TabType = 'brushEdit' | 'renderOutput';
 
@@ -41,7 +44,7 @@ function SyncDisplayCanvases({ trigger, brushLayers }: { trigger: number; brushL
       if (displayCanvas && layer?.canvas) {
         const ctx = displayCanvas.getContext('2d');
         if (ctx) {
-          ctx.clearRect(0, 0, 100, 100);
+          ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
           ctx.drawImage(layer.canvas, 0, 0);
         }
       }
@@ -72,6 +75,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const [dataSource, setDataSource] = useState<DataSource>('webcam');
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [brushSize, setBrushSize] = useState(10);
+  const [brushOpacity, setBrushOpacity] = useState(100);
   const [brushMode, setBrushMode] = useState<BrushMode>('draw');
   const [isInitialized, setIsInitialized] = useState(false);
   const [editingBrushIndex, setEditingBrushIndex] = useState<number | null>(null);
@@ -113,8 +117,9 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const imageSaturationRef = useRef(100);
   const [showBrushLibrary, setShowBrushLibrary] = useState(false);
   // 笔刷编辑模式切换: 'single'=单个笔刷编辑, 'group'=笔刷组编辑
-  const [brushEditMode, setBrushEditMode] = useState<'single' | 'group'>('group');
+  const [brushEditMode, setBrushEditMode] = useState<'single' | 'group'>('single');
   // 单个笔刷编辑相关状态
+  const [hoveredPresetId, setHoveredPresetId] = useState<string | null>(null);
   // 拖拽相关状态
   const [draggedBrushId, setDraggedBrushId] = useState<string | null>(null);
   // 用于触发WebGL渲染器更新
@@ -127,6 +132,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const brushImportInputRef = useRef<HTMLInputElement>(null);
+  const colorInputRef = useRef<HTMLInputElement>(null);
   const sourceCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   const brushCanvasesRef = useRef<(HTMLCanvasElement | null)[]>([]);
@@ -156,22 +163,20 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const sourceImageDataRef = useRef<ImageData | null>(null);
   const [sourceUpdateTrigger, setSourceUpdateTrigger] = useState(0);
 
-  // 笔刷库：从 localStorage 加载
-  const loadBrushPresets = useCallback(() => {
+  // 笔刷库：从 IndexedDB 加载
+  const loadBrushPresets = useCallback(async () => {
     try {
-      const saved = localStorage.getItem('brushPresets');
-      if (saved) {
-        setBrushPresets(JSON.parse(saved));
-      }
+      const presets = await dbGetBrushPresets();
+      setBrushPresets(presets);
     } catch (e) {
       console.error('Failed to load brush presets:', e);
     }
   }, []);
 
-  // 保存笔刷库到 localStorage
-  const saveBrushPresets = useCallback((presets: BrushPreset[]) => {
+  // 保存笔刷库到 IndexedDB
+  const saveBrushPresets = useCallback(async (presets: BrushPreset[]) => {
     try {
-      localStorage.setItem('brushPresets', JSON.stringify(presets));
+      await dbSaveBrushPresets(presets);
       setBrushPresets(presets);
     } catch (e) {
       console.error('Failed to save brush presets:', e);
@@ -209,7 +214,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
           const canvas = brushCanvasesRef.current[index];
           if (canvas) {
             const ctx = canvas.getContext('2d');
-            if (ctx) ctx.clearRect(0, 0, 100, 100);
+            if (ctx) ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
           }
           brushLayersRef.current[index] = null;
           resolve();
@@ -221,8 +226,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
           if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-              ctx.clearRect(0, 0, 100, 100);
-              ctx.drawImage(img, 0, 0, 100, 100);
+              ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+              ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
               brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
             }
           }
@@ -296,11 +301,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     if (!canvas) return;
     // Skip if already initialized with content
     if (brushLayersRef.current[index] && brushLayersRef.current[index].canvas === canvas) return;
-    canvas.width = 100;
-    canvas.height = 100;
+    canvas.width = BRUSH_SIZE;
+    canvas.height = BRUSH_SIZE;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.clearRect(0, 0, 100, 100);
+      ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
       brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
     }
   }, []);
@@ -520,7 +525,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       for (let col = 0; col < gridSizeX; col++) {
         const layer = brushLayersRef.current[grid[row][col].level];
         if (layer) {
-          outputCtx.drawImage(layer.canvas, 0, 0, 100, 100, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+          outputCtx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
         }
       }
     }
@@ -650,7 +655,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     tempCtx.drawImage(video, 0, 0, 100, 100);
 
     // 存储原始图像数据（用于图像调整）
-    editingOriginalImageRef.current = tempCtx.getImageData(0, 0, 100, 100);
+    editingOriginalImageRef.current = tempCtx.getImageData(0, 0, BRUSH_SIZE, BRUSH_SIZE);
 
     // 停止相机预览（保持stream以便再次拍摄）
     if (cameraStream) {
@@ -835,6 +840,69 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     reader.readAsDataURL(file);
   };
 
+  // 处理导入笔刷图片（100x100，正方形裁剪，支持多选）
+  const handleBrushImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const validFiles = Array.from(files).filter(f => {
+      const ext = f.name.split('.').pop()?.toLowerCase();
+      return ext === 'jpg' || ext === 'jpeg' || ext === 'png';
+    });
+
+    if (validFiles.length === 0) {
+      alert('请选择 JPG 或 PNG 格式的图片');
+      return;
+    }
+
+    const processFile = (file: File, index: number): Promise<BrushPreset> => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const size = Math.min(img.width, img.height);
+            const sx = (img.width - size) / 2;
+            const sy = (img.height - size) / 2;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = BRUSH_SIZE;
+            canvas.height = BRUSH_SIZE;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              resolve({
+                id: `${Date.now()}-${index}`,
+                name: `笔刷 ${Date.now()}-${index}`,
+                timestamp: Date.now(),
+                layers: ['', null, null, null, null, null, null, null, null, null],
+              });
+              return;
+            }
+
+            ctx.drawImage(img, sx, sy, size, size, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+            const dataUrl = canvas.toDataURL('image/png');
+
+            resolve({
+              id: `${Date.now()}-${index}`,
+              name: `笔刷 ${Date.now()}-${index}`,
+              timestamp: Date.now(),
+              layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+            });
+          };
+          img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+      });
+    };
+
+    Promise.all(validFiles.map((f, i) => processFile(f, i))).then((newPresets) => {
+      const updated = [...brushPresets, ...newPresets];
+      saveBrushPresets(updated);
+    });
+
+    e.target.value = '';
+  };
+
   const openBrushEditor = (index: number) => {
     editingLayerIndexRef.current = index;
     setEditingBrushIndex(index);
@@ -843,7 +911,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     // 保存编辑前的快照
     const layer = brushLayersRef.current[index];
     if (layer) {
-      editingSnapshotRef.current = layer.ctx.getImageData(0, 0, 100, 100);
+      editingSnapshotRef.current = layer.ctx.getImageData(0, 0, BRUSH_SIZE, BRUSH_SIZE);
     } else {
       editingSnapshotRef.current = null;
     }
@@ -855,7 +923,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         const ctx = editorCanvas.getContext('2d');
         if (ctx) {
           ctx.clearRect(0, 0, 400, 400);
-          ctx.drawImage(layer.canvas, 0, 0, 100, 100, 0, 0, 400, 400);
+          ctx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, 0, 0, 400, 400);
         }
       }
     }, 50);
@@ -908,8 +976,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       const layer = brushLayersRef.current[index];
       if (layer) {
         // 400x400 -> 100x100
-        layer.ctx.clearRect(0, 0, 100, 100);
-        layer.ctx.drawImage(editorCanvas, 0, 0, 100, 100);
+        layer.ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+        layer.ctx.drawImage(editorCanvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
       }
     }
     editingSnapshotRef.current = null;
@@ -951,6 +1019,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       if (!ctx) return;
       const { x, y } = getCanvasCoords(e, editorCanvas);
       lastDrawPosRef.current = { x, y };
+      // Set opacity
+      ctx.globalAlpha = brushOpacity / 100;
       // Draw a dot at click position
       if (brushMode === 'draw') {
         ctx.fillStyle = brushColor;
@@ -964,6 +1034,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
       }
+      ctx.globalAlpha = 1;
       return;
     }
 
@@ -978,6 +1049,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     lastDrawPosRef.current = { x, y };
 
     const draw = (ctx: CanvasRenderingContext2D, px: number, py: number, lastX?: number, lastY?: number) => {
+      ctx.globalAlpha = brushOpacity / 100;
       if (brushMode === 'draw') {
         ctx.fillStyle = brushColor;
         ctx.beginPath();
@@ -1000,6 +1072,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
       }
+      ctx.globalAlpha = 1;
     };
 
     if (editorCtx) draw(editorCtx, x, y);
@@ -1019,6 +1092,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       if (!isSingleBrushDrawingRef.current) return;
       const ctx = editorCanvas.getContext('2d');
       if (!ctx) return;
+      ctx.globalAlpha = brushOpacity / 100;
       const { x, y } = getCanvasCoords(e, editorCanvas);
       const lastPos = lastDrawPosRef.current;
       if (brushMode === 'draw') {
@@ -1046,6 +1120,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
       }
+      ctx.globalAlpha = 1;
       lastDrawPosRef.current = { x, y };
       return;
     }
@@ -1060,6 +1135,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     const lastPos = lastDrawPosRef.current;
 
     const draw = (ctx: CanvasRenderingContext2D, px: number, py: number, lastX?: number, lastY?: number) => {
+      ctx.globalAlpha = brushOpacity / 100;
       if (brushMode === 'draw') {
         ctx.fillStyle = brushColor;
         ctx.beginPath();
@@ -1085,6 +1161,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
       }
+      ctx.globalAlpha = 1;
     };
 
     if (editorCtx) draw(editorCtx, x, y, lastPos?.x, lastPos?.y);
@@ -1134,8 +1211,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     img.onload = () => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.clearRect(0, 0, 100, 100);
-        ctx.drawImage(img, 0, 0, 100, 100);
+        ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+        ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
         brushLayersRef.current[slotIndex] = { canvas, ctx, isDrawing: false };
         setRenderTrigger(t => t + 1);
         setBrushUpdateTrigger(t => t + 1);
@@ -1151,7 +1228,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
 
   const resetAllBrushes = () => {
     brushLayersRef.current.forEach((layer) => {
-      if (layer) layer.ctx.clearRect(0, 0, 100, 100);
+      if (layer) layer.ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
     });
     setRenderTrigger(t => t + 1);
   };
@@ -1239,6 +1316,15 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
 
   return (
     <div className="flex h-full flex-col bg-[#09090b] text-[#fafafa]">
+      {/* Hidden brush import file input */}
+      <input
+        ref={brushImportInputRef}
+        type="file"
+        accept="image/jpeg,image/png"
+        multiple
+        onChange={handleBrushImport}
+        className="hidden"
+      />
       {/* Tab Navigation */}
       <div className="flex border-b border-[#27272a] bg-[#18181b]">
         <button
@@ -1293,7 +1379,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       {/* Tab Content */}
       {activeTab === 'brushEdit' ? (
         /* Brush Edit Tab */
-        <div className="flex flex-1">
+        <div className="flex flex-1 overflow-hidden">
           {brushEditMode === 'single' ? (
             /* Single Brush Edit Mode - library on left, editor on right */
             <>
@@ -1301,30 +1387,57 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
               <div className="w-64 bg-zinc-800 p-3 flex flex-col h-full border-r border-zinc-700">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium">笔刷库</h3>
-                  <button
-                    onClick={() => {
-                      // Clear canvas for new brush
-                      const canvas = singleBrushEditorRef.current;
-                      if (canvas) {
-                        const ctx = canvas.getContext('2d');
-                        if (ctx) ctx.clearRect(0, 0, 400, 400);
-                      }
-                    }}
-                    className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs"
-                  >
-                    新建
-                  </button>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        brushImportInputRef.current?.click();
+                      }}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs"
+                    >
+                      导入
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const zip = new JSZip();
+                        brushPresets.forEach((preset, index) => {
+                          const layer = preset.layers[0];
+                          if (layer) {
+                            // Convert base64 to binary
+                            const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
+                            const binaryString = atob(base64Data);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {
+                              bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            zip.file(`brush_${index + 1}.png`, bytes);
+                          }
+                        });
+                        const blob = await zip.generateAsync({ type: 'blob' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `brushes-${Date.now()}.zip`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-xs"
+                    >
+                      导出
+                    </button>
+                  </div>
                 </div>
-                {/* Brush grid - 6 per row */}
-                <div className="flex-1 overflow-y-auto">
-                  <div className="grid grid-cols-6 gap-2">
+                {/* Brush grid - 5 per row */}
+                <div className="flex-1 overflow-y-auto pt-1 pr-1.5">
+                  <div className="grid grid-cols-5 gap-2">
                     {brushPresets.length === 0 ? (
-                      <div className="col-span-6 text-xs text-zinc-500 text-center py-8">暂无笔刷</div>
+                      <div className="col-span-5 text-xs text-zinc-500 text-center py-8">暂无笔刷</div>
                     ) : (
                       brushPresets.map((preset) => (
                         <div
                           key={preset.id}
-                          className="w-10 h-10 bg-zinc-700 rounded border border-zinc-600 overflow-hidden cursor-pointer hover:border-blue-500 transition-colors"
+                          className="relative w-10 h-10 cursor-pointer group"
+                          onMouseEnter={() => setHoveredPresetId(preset.id)}
+                          onMouseLeave={() => setHoveredPresetId(null)}
                           onClick={() => {
                             // Load first layer into editor canvas
                             const firstLayer = preset.layers[0];
@@ -1344,8 +1457,23 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                             }
                           }}
                         >
-                          {preset.layers[0] && (
-                            <img src={preset.layers[0]} alt="" className="w-full h-full object-contain" />
+                          <div className="w-full h-full bg-zinc-700 rounded border border-zinc-600 transition-colors group-hover:border-blue-500">
+                            {preset.layers[0] && (
+                              <img src={preset.layers[0]} alt="" className="w-full h-full object-contain" />
+                            )}
+                          </div>
+                          {hoveredPresetId === preset.id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deletePreset(preset.id);
+                              }}
+                              className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center shadow-md z-10"
+                            >
+                              <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           )}
                         </div>
                       ))
@@ -1531,22 +1659,40 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                           className="w-24 h-1 bg-zinc-700 rounded appearance-none cursor-pointer"
                         />
                       </div>
-                      {/* Colors */}
-                      <div className="flex gap-1">
-                        {['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080'].map((color) => (
-                          <button
-                            key={color}
-                            onClick={() => setBrushColor(color)}
-                            className={`w-6 h-6 rounded border-2 ${brushColor === color ? 'border-white' : 'border-transparent'} hover:scale-110 transition-transform`}
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
+                      {/* Opacity */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-400">{brushOpacity}%</span>
                         <input
+                          type="range"
+                          min="10"
+                          max="100"
+                          value={brushOpacity}
+                          onChange={(e) => setBrushOpacity(Number(e.target.value))}
+                          className="w-24 h-1 bg-zinc-700 rounded appearance-none cursor-pointer"
+                        />
+                      </div>
+                      {/* Colors - 2 rows of 5, direct color input replaces preview */}
+                      <div className="flex items-center gap-2">
+                        {/* Direct color input - visible and clickable */}
+                        <input
+                          ref={colorInputRef}
                           type="color"
                           value={brushColor}
                           onChange={(e) => setBrushColor(e.target.value)}
-                          className="w-6 h-6 rounded cursor-pointer border border-zinc-600"
+                          className="w-15 h-15 rounded border-0 border-zinc-500 cursor-pointer"
+                          title="选择颜色"
                         />
+                        {/* Quick color palette - 2 rows of 5 */}
+                        <div className="grid grid-cols-5 gap-1">
+                          {['#2c2c2c', '#744242', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080', '#c0c0c0'].map((color) => (
+                            <button
+                              key={color}
+                              onClick={() => setBrushColor(color)}
+                              className={`w-6 h-6 rounded border-2 ${brushColor === color ? 'border-white' : 'border-transparent'} hover:scale-110 transition-transform`}
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </div>
                     {/* Save/Clear Buttons */}
@@ -1568,11 +1714,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                           const canvas = singleBrushEditorRef.current;
                           if (canvas) {
                             const tempCanvas = document.createElement('canvas');
-                            tempCanvas.width = 100;
-                            tempCanvas.height = 100;
+                            tempCanvas.width = BRUSH_SIZE;
+                            tempCanvas.height = BRUSH_SIZE;
                             const tempCtx = tempCanvas.getContext('2d');
                             if (tempCtx) {
-                              tempCtx.drawImage(canvas, 0, 0, 100, 100);
+                              tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
                               const dataUrl = tempCanvas.toDataURL('image/png');
                               const newPreset: BrushPreset = {
                                 id: Date.now().toString(),
@@ -2102,11 +2248,27 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                       />
                     </div>
 
-                    {/* Color Palette */}
+                    {/* Opacity slider */}
+                    <div>
+                      <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                        <span>透明度</span>
+                        <span>{brushOpacity}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="100"
+                        value={brushOpacity}
+                        onChange={(e) => setBrushOpacity(Number(e.target.value))}
+                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Color Palette - 2 rows */}
                     <div>
                       <span className="text-xs text-zinc-400 block mb-2">取色色盘</span>
                       <div className="grid grid-cols-5 gap-1">
-                        {['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080', '#c0c0c0', '#8b4513', '#ff6347', '#32cd32', '#4169e1', '#daa520', '#ff1493', '#00ced1', '#9370db', '#f0e68c', '#90ee90'].map((color) => (
+                        {['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080', '#c0c0c0'].map((color) => (
                           <button
                             key={color}
                             onClick={() => setBrushColor(color)}
@@ -2117,14 +2279,15 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                       </div>
                     </div>
 
-                    {/* Color picker */}
+                    {/* Color preview - direct color input replaces preview */}
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-400">取色</span>
                       <input
+                        ref={colorInputRef}
                         type="color"
                         value={brushColor}
                         onChange={(e) => setBrushColor(e.target.value)}
-                        className="w-8 h-8 rounded cursor-pointer border border-zinc-600"
+                        className="w-10 h-10 rounded border-2 border-zinc-400 cursor-pointer"
+                        title="选择颜色"
                       />
                     </div>
 

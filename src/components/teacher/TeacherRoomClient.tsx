@@ -29,8 +29,8 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
   const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
   const [onlineMembers, setOnlineMembers] = useState<RoomMember[]>(members);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [showStudentPanel, setShowStudentPanel] = useState(true);
-  const [studentListCollapsed, setStudentListCollapsed] = useState(false);
+  const [showStudentPanel, setShowStudentPanel] = useState(false);
+  const [studentListCollapsed, setStudentListCollapsed] = useState(true);
   const supabase = createClient();
   const teacherStudioRef = useRef<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>(null);
 
