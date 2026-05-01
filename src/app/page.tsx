@@ -8,7 +8,7 @@ export default function Home() {
         {/* Logo Area */}
         <div className="flex flex-col items-center gap-4">
           {/* Logo Image */}
-          <div className="relative h-[249px] w-[250px] overflow-hidden rounded border-2 border-white/10">
+          <div className="relative h-[249px] w-[250px] overflow-hidden rounded border-0 border-white/10">
             <Image
               src="/s.png"
               alt="Pixel Mosaic Logo"
