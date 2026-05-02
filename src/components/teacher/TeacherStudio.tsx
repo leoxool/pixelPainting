@@ -112,15 +112,15 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   // 摄像头相关状态在 cameraStatus 中统一管理
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   // 拍摄状态：'idle' | 'viewing' | 'adjusting'
-  const [cameraStatus, setCameraStatus] = useState<'idle' | 'viewing' | 'adjusting'>('idle');
-  const [removeWhiteBg, setRemoveWhiteBg] = useState(false);
-  const [bgRemoveStrength, setBgRemoveStrength] = useState(128); // 0-255, 默认为128
+  const [cameraStatus, setCameraStatus] = useState<'idle' | 'viewing' | 'adjusting'>('viewing');
+  const [removeWhiteBg, setRemoveWhiteBg] = useState(true);
+  const [bgRemoveStrength, setBgRemoveStrength] = useState(256); // 0-256
   const [imageContrast, setImageContrast] = useState(100); // 0-200, 100为默认
   const [imageBrightness, setImageBrightness] = useState(100); // 0-200, 100为默认
   const [imageSaturation, setImageSaturation] = useState(100); // 0-200, 100为默认
   // Refs to track latest adjustment values (to avoid stale closure issues)
   const removeWhiteBgRef = useRef(false);
-  const bgRemoveStrengthRef = useRef(128);
+  const bgRemoveStrengthRef = useRef(256);
   const imageContrastRef = useRef(100);
   const imageBrightnessRef = useRef(100);
   const imageSaturationRef = useRef(100);
@@ -364,6 +364,13 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       cameraVideoRef.current.srcObject = cameraStream;
     }
   }, [cameraStream]);
+
+  // 默认启动摄像头
+  useEffect(() => {
+    if (cameraStatus === 'viewing' && !cameraStream) {
+      startCameraCapture();
+    }
+  }, []);
 
   // 更新摄像头预览（带去背景效果）- 提前声明以便在 useEffect 中使用
   const updateCameraPreview = useCallback(() => {
@@ -854,6 +861,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       editingSnapshotRef.current = layer.ctx.getImageData(0, 0, BRUSH_SIZE, BRUSH_SIZE);
     } else {
       editingSnapshotRef.current = null;
+    }
+
+    // 如果当前是涂鸦状态，先取消再启动摄像头
+    if (cameraStatus === 'idle') {
+      startCameraCapture();
     }
 
     setTimeout(() => {
@@ -1374,20 +1386,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
 
               {/* Right: Single Brush Editor */}
               <div className="flex-1 flex flex-col p-6">
-                {/* Tab Toggle - 涂鸦/拍摄 buttons - upper left */}
+                {/* Tab Toggle - 拍摄/涂鸦 buttons - upper left */}
                 <div className="flex border-b border-zinc-600 mb-4 w-fit">
-                  <button
-                    onClick={() => {
-                      if (cameraStatus !== 'idle') cancelCameraCapture();
-                    }}
-                    className={`px-4 py-2 text-xs font-medium transition-colors ${
-                      cameraStatus === 'idle'
-                        ? 'text-white border-b-2 border-blue-500'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    涂鸦
-                  </button>
                   <button
                     onClick={() => {
                       if (cameraStatus === 'idle') {
@@ -1402,10 +1402,22 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                   >
                     拍摄
                   </button>
+                  <button
+                    onClick={() => {
+                      if (cameraStatus !== 'idle') cancelCameraCapture();
+                    }}
+                    className={`px-4 py-2 text-xs font-medium transition-colors ${
+                      cameraStatus === 'idle'
+                        ? 'text-white border-b-2 border-blue-500'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    涂鸦
+                  </button>
                 </div>
 
                 {/* Canvas area - switches between doodle canvas and camera preview */}
-                <div className="flex items-center gap-0">
+                <div className="flex items-center gap-5">
                   {/* Left Toolbar - Photoshop style, 10px from tab left edge */}
                   {cameraStatus === 'idle' && (
                     <Toolbar
@@ -1438,10 +1450,33 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                     onBrightnessChange={setImageBrightness}
                     onContrastChange={setImageContrast}
                     onSaturationChange={setImageSaturation}
+                    onApplyAdjustments={applyImageAdjustments}
                     onConfirmPhoto={confirmPhoto}
                     onStartCameraCapture={startCameraCapture}
                     onCancelCameraCapture={cancelCameraCapture}
                     onTakePhoto={takePhoto}
+                    onSaveToBrushLibrary={() => {
+                      const canvas = adjustmentPreviewRef.current;
+                      if (canvas) {
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = BRUSH_SIZE;
+                        tempCanvas.height = BRUSH_SIZE;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        if (tempCtx) {
+                          tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+                          const dataUrl = tempCanvas.toDataURL('image/png');
+                          const newPreset: BrushPreset = {
+                            id: Date.now().toString(),
+                            name: `笔刷 ${Date.now()}`,
+                            timestamp: Date.now(),
+                            layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+                          };
+                          const updated = [...brushPresets, newPreset];
+                          saveBrushPresets(updated);
+                          alert('已保存到笔刷库！');
+                        }
+                      }
+                    }}
                     onSaveToLibrary={() => {
                       const canvas = singleBrushEditorRef.current;
                       if (canvas) {
@@ -1469,6 +1504,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                       if (canvas) {
                         const ctx = canvas.getContext('2d');
                         if (ctx) ctx.clearRect(0, 0, 400, 400);
+                      }
+                    }}
+                    onCancelEdit={() => {
+                      if (cameraStatus === 'idle') {
+                        startCameraCapture();
                       }
                     }}
                     handleEditingMouseDown={handleEditingMouseDown}
