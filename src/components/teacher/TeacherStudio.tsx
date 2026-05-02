@@ -1391,6 +1391,18 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                   <button
                     onClick={() => {
                       if (cameraStatus === 'idle') {
+                        // Reset adjustment values to initial defaults (sync refs first)
+                        removeWhiteBgRef.current = true;
+                        bgRemoveStrengthRef.current = 256;
+                        imageBrightnessRef.current = 100;
+                        imageContrastRef.current = 100;
+                        imageSaturationRef.current = 100;
+                        setImageBrightness(100);
+                        setImageContrast(100);
+                        setImageSaturation(100);
+                        setBgRemoveStrength(256);
+                        setRemoveWhiteBg(true);
+                        editingOriginalImageRef.current = null;
                         startCameraCapture();
                       }
                     }}
