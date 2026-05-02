@@ -2,6 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { TeacherParticleCanvas } from './TeacherParticleCanvas';
+import { Toolbar } from './Toolbar';
+import { BrushLibrary } from './BrushLibrary';
+import { BrushEditorModal } from './BrushEditorModal';
+import { BrushLibraryPanel } from './BrushLibraryPanel';
+import { BrushCanvas } from './BrushCanvas';
+import { BrushLayerGrid } from './BrushLayerGrid';
+import { DataSourcePanel } from './RenderOutput/DataSourcePanel';
+import { RenderOutputPanel } from './RenderOutput';
+import { getLevelGray, extractGridData, renderArt } from './gridUtils';
 import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset } from '@/lib/db';
 import JSZip from 'jszip';
 
@@ -428,108 +437,20 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     }
   }, [cameraStatus, pendingBrushImageData]);
 
-  const getLevelGray = (level: number): string => {
-    const gray = Math.floor(level * 25.5);
-    return `rgb(${gray}, ${gray}, ${gray})`;
-  };
+  // getLevelGray and mapGrayscaleToLevel are now in gridUtils.ts
 
-  const mapGrayscaleToLevel = useCallback((grayscale: number): number => {
-    const clamped = Math.max(0, Math.min(255, grayscale));
-    return Math.min(9, Math.max(0, Math.floor((clamped / 255) * 10)));
-  }, []);
-
-  const extractGridData = useCallback((): GridCell[][] => {
-    const sourceCanvas = sourceCanvasRef.current;
-    const sourceCtx = sourceCtxRef.current;
-    if (!sourceCanvas || !sourceCtx) return [];
-
-    const grid: GridCell[][] = [];
-
-    const canvasWidth = sourceCanvas.width;
-    const canvasHeight = sourceCanvas.height;
-
-    // 计算图片在实际canvas中的绘制区域
-    let drawX = 0, drawY = 0, drawWidth = canvasWidth, drawHeight = canvasHeight;
-    if (sourceAspectRatio >= 1) {
-      drawHeight = canvasWidth / sourceAspectRatio;
-      drawY = (canvasHeight - drawHeight) / 2;
-    } else {
-      drawWidth = canvasHeight * sourceAspectRatio;
-      drawX = (canvasWidth - drawWidth) / 2;
-    }
-
-    const cellWidth = drawWidth / gridSizeX;
-    const cellHeight = drawHeight / gridSizeY;
-
-    const imageData = sourceCtx.getImageData(0, 0, canvasWidth, canvasHeight);
-    const data = imageData.data;
-
-    for (let row = 0; row < gridSizeY; row++) {
-      grid[row] = [];
-      for (let col = 0; col < gridSizeX; col++) {
-        const startX = Math.floor(drawX + col * cellWidth);
-        const startY = Math.floor(drawY + row * cellHeight);
-        const endX = Math.floor(drawX + (col + 1) * cellWidth);
-        const endY = Math.floor(drawY + (row + 1) * cellHeight);
-
-        let totalGrayscale = 0;
-        let pixelCount = 0;
-
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
-            if (x >= 0 && x < canvasWidth && y >= 0 && y < canvasHeight) {
-              const idx = (y * canvasWidth + x) * 4;
-              totalGrayscale += data[idx] * 0.2126 + data[idx + 1] * 0.7152 + data[idx + 2] * 0.0722;
-              pixelCount++;
-            }
-          }
-        }
-
-        const avgGrayscale = pixelCount > 0 ? totalGrayscale / pixelCount : 128;
-        grid[row][col] = { row, col, grayscale: avgGrayscale, level: mapGrayscaleToLevel(avgGrayscale) };
-      }
-    }
-    return grid;
-  }, [mapGrayscaleToLevel, sourceAspectRatio, gridSizeX, gridSizeY]);
-
-  const renderArt = useCallback(() => {
-    const outputCanvas = outputCanvasRef.current;
-    const outputCtx = outputCtxRef.current;
-    if (!outputCanvas || !outputCtx) return;
-    if (brushLayersRef.current.filter(l => l !== null).length === 0) return;
-
-    // 根据宽高比设置输出尺寸
-    const canvasWidth = sourceCanvasRef.current?.width || SOURCE_WIDTH;
-    const canvasHeight = sourceCanvasRef.current?.height || SOURCE_HEIGHT;
-    let outputWidth, outputHeight;
-    if (sourceAspectRatio >= 1) {
-      outputWidth = canvasWidth;
-      outputHeight = canvasWidth / sourceAspectRatio;
-    } else {
-      outputWidth = canvasHeight * sourceAspectRatio;
-      outputHeight = canvasHeight;
-    }
-
-    outputCanvas.width = Math.round(outputWidth);
-    outputCanvas.height = Math.round(outputHeight);
-    const cellWidth = outputWidth / gridSizeX;
-    const cellHeight = outputHeight / gridSizeY;
-
-    outputCtx.fillStyle = '#ffffff';
-    outputCtx.fillRect(0, 0, outputWidth, outputHeight);
-
-    const grid = extractGridData();
-    if (grid.length === 0) return;
-
-    for (let row = 0; row < gridSizeY; row++) {
-      for (let col = 0; col < gridSizeX; col++) {
-        const layer = brushLayersRef.current[grid[row][col].level];
-        if (layer) {
-          outputCtx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-        }
-      }
-    }
-  }, [extractGridData, sourceAspectRatio, gridSizeX, gridSizeY]);
+  const handleRenderArt = useCallback(() => {
+    renderArt({
+      outputCanvasRef,
+      outputCtxRef,
+      sourceCanvasRef,
+      sourceCtxRef,
+      brushLayersRef,
+      sourceAspectRatio,
+      gridSizeX,
+      gridSizeY,
+    });
+  }, [sourceAspectRatio, gridSizeX, gridSizeY]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -1402,104 +1323,54 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
           {brushEditMode === 'single' ? (
             /* Single Brush Edit Mode - library on left, editor on right */
             <>
-              {/* Left: Single Brush Library - 6 per row, thumbnails only */}
-              <div className="w-64 bg-zinc-800 p-3 flex flex-col h-full border-r border-zinc-700">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium">笔刷库</h3>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        brushImportInputRef.current?.click();
-                      }}
-                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs"
-                    >
-                      导入
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const zip = new JSZip();
-                        brushPresets.forEach((preset, index) => {
-                          const layer = preset.layers[0];
-                          if (layer) {
-                            // Convert base64 to binary
-                            const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
-                            const binaryString = atob(base64Data);
-                            const bytes = new Uint8Array(binaryString.length);
-                            for (let i = 0; i < binaryString.length; i++) {
-                              bytes[i] = binaryString.charCodeAt(i);
-                            }
-                            zip.file(`brush_${index + 1}.png`, bytes);
-                          }
-                        });
-                        const blob = await zip.generateAsync({ type: 'blob' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `brushes-${Date.now()}.zip`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-xs"
-                    >
-                      导出
-                    </button>
-                  </div>
-                </div>
-                {/* Brush grid - 5 per row */}
-                <div className="flex-1 overflow-y-auto pt-1 pr-1.5">
-                  <div className="grid grid-cols-5 gap-2">
-                    {brushPresets.length === 0 ? (
-                      <div className="col-span-5 text-xs text-zinc-500 text-center py-8">暂无笔刷</div>
-                    ) : (
-                      brushPresets.map((preset) => (
-                        <div
-                          key={preset.id}
-                          className="relative w-10 h-10 cursor-pointer group"
-                          onMouseEnter={() => setHoveredPresetId(preset.id)}
-                          onMouseLeave={() => setHoveredPresetId(null)}
-                          onClick={() => {
-                            // Load first layer into editor canvas
-                            const firstLayer = preset.layers[0];
-                            if (firstLayer) {
-                              const img = new Image();
-                              img.onload = () => {
-                                const canvas = singleBrushEditorRef.current;
-                                if (canvas) {
-                                  const ctx = canvas.getContext('2d');
-                                  if (ctx) {
-                                    ctx.clearRect(0, 0, 400, 400);
-                                    ctx.drawImage(img, 0, 0, 400, 400);
-                                  }
-                                }
-                              };
-                              img.src = firstLayer;
-                            }
-                          }}
-                        >
-                          <div className="w-full h-full bg-zinc-700 rounded border border-zinc-600 transition-colors group-hover:border-blue-500">
-                            {preset.layers[0] && (
-                              <img src={preset.layers[0]} alt="" className="w-full h-full object-contain" />
-                            )}
-                          </div>
-                          {hoveredPresetId === preset.id && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deletePreset(preset.id);
-                              }}
-                              className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center shadow-md z-10"
-                            >
-                              <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+              {/* Left: Single Brush Library */}
+              <BrushLibraryPanel
+                brushPresets={brushPresets}
+                hoveredPresetId={hoveredPresetId}
+                onHoverPreset={setHoveredPresetId}
+                onSelectPreset={(preset) => {
+                  const firstLayer = preset.layers[0];
+                  if (firstLayer) {
+                    const img = new Image();
+                    img.onload = () => {
+                      const canvas = singleBrushEditorRef.current;
+                      if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                          ctx.clearRect(0, 0, 400, 400);
+                          ctx.drawImage(img, 0, 0, 400, 400);
+                        }
+                      }
+                    };
+                    img.src = firstLayer;
+                  }
+                }}
+                onDeletePreset={deletePreset}
+                onImport={() => brushImportInputRef.current?.click()}
+                onExport={async () => {
+                  const zip = new JSZip();
+                  brushPresets.forEach((preset, index) => {
+                    const layer = preset.layers[0];
+                    if (layer) {
+                      const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
+                      const binaryString = atob(base64Data);
+                      const bytes = new Uint8Array(binaryString.length);
+                      for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                      }
+                      zip.file(`brush_${index + 1}.png`, bytes);
+                    }
+                  });
+                  const blob = await zip.generateAsync({ type: 'blob' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `brushes-${Date.now()}.zip`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                brushImportInputRef={brushImportInputRef}
+              />
 
               {/* Right: Single Brush Editor */}
               <div className="flex-1 flex flex-col p-6">
@@ -1537,1036 +1408,200 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                 <div className="flex items-center gap-0">
                   {/* Left Toolbar - Photoshop style, 10px from tab left edge */}
                   {cameraStatus === 'idle' && (
-                    <div className="ml-[10px] flex flex-col items-center gap-1 py-0">
-                      {/* Brush/Eraser toggles */}
-                      <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => setBrushMode('draw')}
-                          className={`px-1 py-1 rounded text-xs ${brushMode === 'draw' ? 'bg-blue-600' : 'bg-zinc-700 hover:bg-zinc-600'}`}
-                        >
-                          画笔
-                        </button>
-                        <button
-                          onClick={() => setBrushMode('erase')}
-                          className={`px-1 py-1 rounded text-xs ${brushMode === 'erase' ? 'bg-red-600' : 'bg-zinc-700 hover:bg-zinc-600'}`}
-                        >
-                          橡皮
-                        </button>
-                      </div>
-
-                      {/* Size slider - vertical slide (up/down) */}
-                      <div className="flex flex-col items-center gap-6 py-8">
-                       
-                        <input
-                          type="range"
-                          min="2"
-                          max="40"
-                          value={brushSize}
-                          onChange={(e) => setBrushSize(Number(e.target.value))}
-                          className="w-15 h-4 bg-zinc-700 rounded appearance-none cursor-pointer -rotate-90"
-                        />
-                        <span className="text-xs text-zinc-400">{brushSize}px</span>
-                      </div>
-
-                      {/* Opacity slider - vertical slide (up/down) */}
-                      <div className="flex flex-col items-center gap-6">
-                        
-                        <input
-                          type="range"
-                          min="10"
-                          max="100"
-                          value={brushOpacity}
-                          onChange={(e) => setBrushOpacity(Number(e.target.value))}
-                          className="w-15 h-4 bg-zinc-700 rounded appearance-none cursor-pointer -rotate-90"
-                        />
-                        <span className="text-xs text-zinc-400">{brushOpacity}%</span>
-                      </div>
-
-                      {/* Color palette - vertical arrangement */}
-                      <div className="flex flex-col items-center gap-2 py-4">
-                        <input
-                          ref={colorInputRef}
-                          type="color"
-                          value={brushColor}
-                          onChange={(e) => setBrushColor(e.target.value)}
-                          className="w-10 h-10 border border-zinc-500 cursor-pointer"
-                          title="选择颜色"
-                        />
-                        <div className="grid grid-cols-2 gap-1">
-                          {['#2c2c2c', '#744242', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080', '#c0c0c0'].map((color) => (
-                            <button
-                              key={color}
-                              onClick={() => setBrushColor(color)}
-                              className={`w-5 h-5 rounded border-2 ${brushColor === color ? 'border-white' : 'border-transparent'} hover:scale-110 transition-transform`}
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    <Toolbar
+                      brushMode={brushMode}
+                      brushSize={brushSize}
+                      brushOpacity={brushOpacity}
+                      brushColor={brushColor}
+                      onBrushModeChange={setBrushMode}
+                      onBrushSizeChange={setBrushSize}
+                      onBrushOpacityChange={setBrushOpacity}
+                      onBrushColorChange={setBrushColor}
+                      colorInputRef={colorInputRef}
+                    />
                   )}
 
-                  {/* Canvas centered with remaining space */}
-                  <div className="flex-1 flex justify-center">
-                    <div className="flex flex-col items-center gap-4">
-                    {/* Doodle Canvas - hidden when camera is active */}
-                    {cameraStatus === 'idle' && (
-                      <div
-                        className="w-[400px] h-[400px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900"
-                        style={{
-                          backgroundImage: `
-                            linear-gradient(45deg, #808080 25%, transparent 25%),
-                            linear-gradient(-45deg, #808080 25%, transparent 25%),
-                            linear-gradient(45deg, transparent 75%, #808080 75%),
-                            linear-gradient(-45deg, transparent 75%, #808080 75%)
-                          `,
-                          backgroundSize: '16px 16px',
-                          backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
-                          backgroundColor: '#c0c0c0'
-                        }}
-                      >
-                        <canvas
-                          id="single-editor-canvas"
-                          ref={singleBrushEditorRef}
-                          width={400}
-                          height={400}
-                          className="absolute inset-0 w-full h-full cursor-crosshair"
-                          onMouseDown={handleEditingMouseDown}
-                          onMouseMove={handleEditingMouseMove}
-                          onMouseUp={handleEditingMouseUp}
-                          onMouseLeave={handleEditingMouseUp}
-                        />
-                      </div>
-                    )}
-
-                    {/* Clear and Save buttons - below canvas */}
-                    {cameraStatus === 'idle' && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            const canvas = singleBrushEditorRef.current;
-                            if (canvas) {
-                              const ctx = canvas.getContext('2d');
-                              if (ctx) ctx.clearRect(0, 0, 400, 400);
-                            }
-                          }}
-                          className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-xs"
-                        >
-                          清除
-                        </button>
-                        <button
-                          onClick={() => {
-                            const canvas = singleBrushEditorRef.current;
-                            if (canvas) {
-                              const tempCanvas = document.createElement('canvas');
-                              tempCanvas.width = BRUSH_SIZE;
-                              tempCanvas.height = BRUSH_SIZE;
-                              const tempCtx = tempCanvas.getContext('2d');
-                              if (tempCtx) {
-                                tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-                                const dataUrl = tempCanvas.toDataURL('image/png');
-                                const newPreset: BrushPreset = {
-                                  id: Date.now().toString(),
-                                  name: `笔刷 ${Date.now()}`,
-                                  timestamp: Date.now(),
-                                  layers: [dataUrl, null, null, null, null, null, null, null, null, null],
-                                };
-                                const updated = [...brushPresets, newPreset];
-                                saveBrushPresets(updated);
-                                alert('已保存到笔刷库！');
-                              }
-                            }
-                          }}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs"
-                        >
-                          保存到画笔库
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                  {/* Camera View - shown when camera is active */}
-                  {cameraStatus === 'viewing' && cameraStream && (
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-[400px] h-[400px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900">
-                        <video
-                          ref={cameraVideoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className="absolute inset-0 w-full h-full object-contain"
-                        />
-                        <canvas ref={cameraPreviewRef} className="hidden" />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={takePhoto} className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-medium">拍摄</button>
-                        <button onClick={cancelCameraCapture} className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-sm">取消</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Image Adjustments - after photo taken */}
-                  {cameraStatus === 'adjusting' && (
-                    <div className="flex flex-col items-center gap-4">
-                      {/* Preview canvas with adjustments applied */}
-                      <div
-                        className="w-[400px] h-[400px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900"
-                        style={{
-                          backgroundImage: `
-                            linear-gradient(45deg, #808080 25%, transparent 25%),
-                            linear-gradient(-45deg, #808080 25%, transparent 25%),
-                            linear-gradient(45deg, transparent 75%, #808080 75%),
-                            linear-gradient(-45deg, transparent 75%, #808080 75%)
-                          `,
-                          backgroundSize: '16px 16px',
-                          backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
-                          backgroundColor: '#c0c0c0'
-                        }}
-                      >
-                        <canvas
-                          ref={adjustmentPreviewRef}
-                          width={400}
-                          height={400}
-                          className="absolute inset-0 w-full h-full"
-                        />
-                      </div>
-                      {/* Adjustment controls */}
-                      <div className="flex flex-col items-center gap-2 w-full max-w-md">
-                        <div className="flex items-center gap-4 w-full justify-center">
-                          <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                            <input type="checkbox" checked={removeWhiteBg} onChange={(e) => { setRemoveWhiteBg(e.target.checked); applyImageAdjustments(); }} className="w-3 h-3" />
-                            去背景
-                          </label>
-                          <span className="text-xs text-zinc-500 w-12">亮度</span>
-                          <input type="range" min="0" max="200" value={imageBrightness} onChange={(e) => { setImageBrightness(Number(e.target.value)); applyImageAdjustments(); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
-                          <span className="text-xs text-zinc-400 w-10">{imageBrightness}%</span>
-                        </div>
-                        {removeWhiteBg && (
-                          <div className="flex items-center gap-4 w-full justify-center">
-                            <div className="w-24" />
-                            <span className="text-xs text-zinc-500 w-12">强度</span>
-                            <input type="range" min="0" max="255" value={bgRemoveStrength} onChange={(e) => { setBgRemoveStrength(Number(e.target.value)); applyImageAdjustments(); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
-                            <span className="text-xs text-zinc-400 w-10">{bgRemoveStrength}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-4 w-full justify-center">
-                          <div className="w-16" />
-                          <span className="text-xs text-zinc-500 w-12">对比度</span>
-                          <input type="range" min="0" max="200" value={imageContrast} onChange={(e) => { setImageContrast(Number(e.target.value)); applyImageAdjustments(); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
-                          <span className="text-xs text-zinc-400 w-10">{imageContrast}%</span>
-                        </div>
-                        <div className="flex items-center gap-4 w-full justify-center">
-                          <div className="w-16" />
-                          <span className="text-xs text-zinc-500 w-12">饱和度</span>
-                          <input type="range" min="0" max="200" value={imageSaturation} onChange={(e) => { setImageSaturation(Number(e.target.value)); applyImageAdjustments(); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
-                          <span className="text-xs text-zinc-400 w-10">{imageSaturation}%</span>
-                        </div>
-                        <button onClick={confirmPhoto} className="mt-2 px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium">应用到画布</button>
-                      </div>
-                    </div>
-                  )}
+                  <BrushCanvas
+                    cameraStatus={cameraStatus}
+                    singleBrushEditorRef={singleBrushEditorRef}
+                    cameraVideoRef={cameraVideoRef}
+                    cameraPreviewRef={cameraPreviewRef}
+                    adjustmentPreviewRef={adjustmentPreviewRef}
+                    editingOriginalImageRef={editingOriginalImageRef}
+                    removeWhiteBg={removeWhiteBg}
+                    bgRemoveStrength={bgRemoveStrength}
+                    imageBrightness={imageBrightness}
+                    imageContrast={imageContrast}
+                    imageSaturation={imageSaturation}
+                    onRemoveWhiteBgChange={setRemoveWhiteBg}
+                    onBgRemoveStrengthChange={setBgRemoveStrength}
+                    onBrightnessChange={setImageBrightness}
+                    onContrastChange={setImageContrast}
+                    onSaturationChange={setImageSaturation}
+                    onConfirmPhoto={confirmPhoto}
+                    onStartCameraCapture={startCameraCapture}
+                    onCancelCameraCapture={cancelCameraCapture}
+                    onTakePhoto={takePhoto}
+                    onSaveToLibrary={() => {
+                      const canvas = singleBrushEditorRef.current;
+                      if (canvas) {
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = BRUSH_SIZE;
+                        tempCanvas.height = BRUSH_SIZE;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        if (tempCtx) {
+                          tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+                          const dataUrl = tempCanvas.toDataURL('image/png');
+                          const newPreset: BrushPreset = {
+                            id: Date.now().toString(),
+                            name: `笔刷 ${Date.now()}`,
+                            timestamp: Date.now(),
+                            layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+                          };
+                          const updated = [...brushPresets, newPreset];
+                          saveBrushPresets(updated);
+                          alert('已保存到笔刷库！');
+                        }
+                      }
+                    }}
+                    onClearCanvas={() => {
+                      const canvas = singleBrushEditorRef.current;
+                      if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) ctx.clearRect(0, 0, 400, 400);
+                      }
+                    }}
+                    handleEditingMouseDown={handleEditingMouseDown}
+                    handleEditingMouseMove={handleEditingMouseMove}
+                    handleEditingMouseUp={handleEditingMouseUp}
+                  />
                 </div>
               </div>
             </>
           ) : (
             /* Group Brush Edit Mode (Default) */
-            <div className="text-center">
-              <div className="text-zinc-500 text-sm mb-4">点击笔触缩略图进行编辑</div>
-              {/* Large Preview of all brush layers with gray reference bars */}
-              <div className="inline-flex gap-3 p-6 bg-zinc-800 rounded-lg">
-                {Array.from({ length: 10 }).map((_, index) => (
-                  <div
-                    key={`brush-display-${index}-${brushUpdateTrigger}`}
-                    className={`flex flex-col items-center cursor-pointer ${draggedBrushId ? 'drop-target' : ''}`}
-                    onClick={() => openBrushEditor(index)}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, index)}
-                  >
-                    {/* Gray reference bar - same width as thumbnail, 20px height, no number */}
-                    <div
-                      className="w-16 rounded mb-1"
-                      style={{ backgroundColor: getLevelGray(index), height: '20px' }}
-                    />
-                    {/* Display canvas copy */}
-                    <canvas
-                      id={`brush-display-canvas-${index}`}
-                      className={`w-16 h-16 border-2 rounded transition-colors ${
-                        draggedBrushId
-                          ? 'border-dashed border-blue-400 bg-blue-900/30 hover:border-blue-300'
-                          : 'border-zinc-600 hover:border-blue-500'
-                      }`}
-                      width={100}
-                      height={100}
-                      style={{ backgroundColor: 'transparent' }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-center gap-2">
-                <button onClick={resetAllBrushes} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-xs">
-                  重置
-                </button>
-                <button onClick={() => setShowBrushLibrary(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs">
-                  笔刷库
-                </button>
-                <button onClick={() => setActiveTab('renderOutput')} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-xs">
-                  切换到渲染输出
-                </button>
-              </div>
-            </div>
+            <BrushLayerGrid
+              brushUpdateTrigger={brushUpdateTrigger}
+              draggedBrushId={draggedBrushId}
+              onLayerClick={openBrushEditor}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              getLevelGray={getLevelGray}
+            />
           )}
         </div>
       ) : (
         /* Render Output Tab */
         <div className="flex flex-1 overflow-hidden">
-          {/* Left Panel - Data Source */}
-          <div className="flex w-64 flex-shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#27272a] bg-[#18181b] p-3">
-            {/* Data Source */}
-            <div>
-              <div className="mb-2 flex gap-1">
-                <button
-                  onClick={() => { setDataSource('webcam'); startWebcam(); }}
-                  disabled={isWebcamActive}
-                  className={`rounded px-2 py-1 text-xs ${dataSource === 'webcam' && isWebcamActive ? 'bg-green-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'}`}
-                >
-                  摄像头
-                </button>
-                <button
-                  onClick={() => { stopWebcam(); setDataSource('image'); imageInputRef.current?.click(); }}
-                  className={`rounded px-2 py-1 text-xs ${dataSource === 'image' ? 'bg-blue-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'}`}
-                >
-                  载入参考图
-                </button>
-              </div>
-              {/* Hidden file input */}
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <div className="relative w-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-700" style={{ aspectRatio: sourceAspectRatio }}>
-                <canvas id="source-display-canvas" className="absolute inset-0 w-full h-full object-contain" />
-                <video ref={videoRef} className={`absolute inset-0 w-full h-full object-cover transition-opacity ${dataSource === 'webcam' ? 'opacity-100' : 'opacity-0'}`} playsInline muted />
-              </div>
-            </div>
+          <DataSourcePanel
+            dataSource={dataSource}
+            isWebcamActive={isWebcamActive}
+            sourceAspectRatio={sourceAspectRatio}
+            onDataSourceChange={setDataSource}
+            onStartWebcam={startWebcam}
+            onStopWebcam={stopWebcam}
+            onImageUpload={handleImageUpload}
+            onOpenBrushLibrary={() => setShowBrushLibrary(true)}
+            imageInputRef={imageInputRef}
+            videoRef={videoRef}
+          />
 
-            {/* Brush Library Button */}
-            <button
-              onClick={() => setShowBrushLibrary(true)}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-              </svg>
-              笔刷库
-            </button>
-
-            {/* Settings Panel */}
-            <div className="mt-4 space-y-4">
-              <h3 className="text-xs font-semibold text-zinc-300">采样精度</h3>
-              <div className="mb-4">
-                <label className="text-xs text-zinc-400 flex justify-between">
-                  <span>网格采样</span>
-                  <span>{gridSamplingSize}px</span>
-                </label>
-                <input
-                  type="range"
-                  min="5"
-                  max="30"
-                  step="1"
-                  value={gridSamplingSize}
-                  onChange={(e) => setGridSamplingSize(Number(e.target.value))}
-                  className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                />
-                <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
-                  <span>精细</span>
-                  <span>粗糙</span>
-                </div>
-              </div>
-
-              <h3 className="text-xs font-semibold text-zinc-300">笔触效果</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-zinc-400 flex justify-between">
-                    <span>大小抖动</span>
-                    <span>{sizeJitter}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={sizeJitter}
-                    onChange={(e) => setSizeJitter(Number(e.target.value))}
-                    className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-zinc-400 flex justify-between">
-                    <span>旋转抖动</span>
-                    <span>{Math.round(rotationJitter)}°</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="90"
-                    step="1"
-                    value={rotationJitter}
-                    onChange={(e) => setRotationJitter(Number(e.target.value))}
-                    className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                  />
-                </div>
-                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enableFlip}
-                    onChange={(e) => setEnableFlip(e.target.checked)}
-                    className="w-3 h-3 rounded border-zinc-600"
-                  />
-                  <span>随机翻转</span>
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enableMergeOptimization}
-                    onChange={(e) => setEnableMergeOptimization(e.target.checked)}
-                    className="w-3 h-3 rounded border-zinc-600"
-                  />
-                  <span>笔触合并优化</span>
-                </label>
-
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">
-                  <span className="text-xs text-zinc-400">背景色</span>
-                  <input
-                    type="color"
-                    value={canvasBackgroundColor}
-                    onChange={(e) => setCanvasBackgroundColor(e.target.value)}
-                    className="w-6 h-6 rounded border border-zinc-600 cursor-pointer"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Panel - Output */}
-          <div className="flex-1 flex flex-col p-3">
-            {/* Output status + fullscreen */}
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs text-zinc-500">
-                {isWebcamActive ? '实时' : '静止'} · {sourceAspectRatio >= 1 ? '横版' : '竖版'}
-              </span>
-              {!isFullscreen && (
-                <button
-                  onClick={() => { setIsFullscreen(true); resetTransform(); }}
-                  className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 rounded text-xs flex items-center gap-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
-                  </svg>
-                  全屏
-                </button>
-              )}
-            </div>
-
-            {/* Output Canvas Container - WebGL */}
-            <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-              {/* Canvas wrapper with transform */}
-              <div
-                className={`rounded-lg overflow-hidden ${isFullscreen ? 'fixed inset-0 z-40 flex items-center justify-center' : 'max-w-[600px] w-full h-auto bg-white'}`}
-                style={isFullscreen ? { cursor: isPanning ? 'grabbing' : 'grab', backgroundColor: '#ececec' } : { aspectRatio: sourceAspectRatio }}
-              >
-                <div
-                  style={{
-                    transform: isFullscreen ? `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` : 'none',
-                    transformOrigin: 'center center',
-                    transition: isPanning ? 'none' : 'transform 0.1s ease-out'
-                  }}
-                >
-                  <TeacherParticleCanvas
-                    sourceWidth={sourceResolution.width}
-                    sourceHeight={sourceResolution.height}
-                    gridSizeX={gridSizeX}
-                    gridSizeY={gridSizeY}
-                    brushLayers={brushLayersRef.current}
-                    sourceCanvas={sourceCanvasRef.current}
-                    sizeJitter={sizeJitter}
-                    rotationJitter={rotationJitter}
-                    enableFlip={enableFlip}
-                    enableMergeOptimization={enableMergeOptimization}
-                    backgroundColor={canvasBackgroundColor}
-                    isFullscreen={isFullscreen}
-                    transform={transform}
-                    onTransformChange={setTransform}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    updateTrigger={renderTrigger}
-                  />
-                </div>
-              </div>
-
-              {/* Zoom indicator in fullscreen */}
-              {isFullscreen && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3 py-1 bg-zinc-800/80 rounded-lg text-sm">
-                  滚轮缩放 | 拖拽平移 | 当前缩放: {Math.round(transform.scale * 100)}%
-                </div>
-              )}
-
-              {/* Floating Settings Panel in fullscreen */}
-              {isFullscreen && (
-                <div className="fixed top-4 left-4 z-50">
-                  <button
-                    onClick={() => setShowSettingsPanel(!showSettingsPanel)}
-                    className="p-3 bg-zinc-800/80 hover:bg-zinc-700 rounded-lg text-white transition-colors"
-                    title="设置"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
-                  </button>
-
-                  {/* Expandable Settings Panel */}
-                  {showSettingsPanel && (
-                    <div className="mt-2 w-72 bg-zinc-800/95 backdrop-blur rounded-lg p-4 shadow-xl border border-zinc-700">
-                      <h3 className="text-sm font-semibold mb-3 text-zinc-300">采样精度</h3>
-                      <div className="mb-4">
-                        <label className="text-xs text-zinc-400 flex justify-between">
-                          <span>网格采样</span>
-                          <span>{gridSamplingSize}px</span>
-                        </label>
-                        <input
-                          type="range"
-                          min="5"
-                          max="30"
-                          step="1"
-                          value={gridSamplingSize}
-                          onChange={(e) => setGridSamplingSize(Number(e.target.value))}
-                          className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                        />
-                        <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
-                          <span>精细</span>
-                          <span>粗糙</span>
-                        </div>
-                      </div>
-
-                      <h3 className="text-sm font-semibold mb-3 text-zinc-300">笔触效果</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-xs text-zinc-400 flex justify-between">
-                            <span>大小抖动</span>
-                            <span>{sizeJitter}</span>
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="1"
-                            value={sizeJitter}
-                            onChange={(e) => setSizeJitter(Number(e.target.value))}
-                            className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-zinc-400 flex justify-between">
-                            <span>旋转抖动</span>
-                            <span>{Math.round(rotationJitter)}°</span>
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="90"
-                            step="1"
-                            value={rotationJitter}
-                            onChange={(e) => setRotationJitter(Number(e.target.value))}
-                            className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                          />
-                        </div>
-                        <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={enableFlip}
-                            onChange={(e) => setEnableFlip(e.target.checked)}
-                            className="w-3 h-3 rounded border-zinc-600"
-                          />
-                          <span>随机翻转</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={enableMergeOptimization}
-                            onChange={(e) => setEnableMergeOptimization(e.target.checked)}
-                            className="w-3 h-3 rounded border-zinc-600"
-                          />
-                          <span>笔触合并优化</span>
-                        </label>
-
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">
-                          <span className="text-xs text-zinc-400">背景色</span>
-                          <input
-                            type="color"
-                            value={canvasBackgroundColor}
-                            onChange={(e) => setCanvasBackgroundColor(e.target.value)}
-                            className="w-6 h-6 rounded border border-zinc-600 cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Fullscreen controls - top right, OUTSIDE the canvas container */}
-            {isFullscreen && (
-              <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-                <button
-                  onClick={resetTransform}
-                  className="px-3 py-2 bg-zinc-800/80 hover:bg-zinc-700 rounded-lg text-sm"
-                >
-                  重置
-                </button>
-                <button
-                  onClick={() => { setIsFullscreen(false); resetTransform(); }}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                  退出
-                </button>
-              </div>
-            )}
-
-            {/* Action buttons - below canvas */}
-            {!isFullscreen && (
-              <div className="flex justify-end gap-2 mt-2">
-                <button onClick={renderArt} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs">
-                  刷新
-                </button>
-                <button onClick={() => {
-                  const link = document.createElement('a');
-                  link.download = 'mosaic-art.png';
-                  link.href = outputCanvasRef.current?.toDataURL() || '';
-                  link.click();
-                }} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs">
-                  下载
-                </button>
-              </div>
-            )}
-          </div>
+          <RenderOutputPanel
+            isWebcamActive={isWebcamActive}
+            sourceAspectRatio={sourceAspectRatio}
+            isFullscreen={isFullscreen}
+            setIsFullscreen={setIsFullscreen}
+            transform={transform}
+            setTransform={setTransform}
+            resetTransform={resetTransform}
+            isPanning={isPanning}
+            sourceResolution={sourceResolution}
+            gridSizeX={gridSizeX}
+            gridSizeY={gridSizeY}
+            brushLayers={brushLayersRef.current}
+            sourceCanvas={sourceCanvasRef.current}
+            sizeJitter={sizeJitter}
+            rotationJitter={rotationJitter}
+            enableFlip={enableFlip}
+            enableMergeOptimization={enableMergeOptimization}
+            canvasBackgroundColor={canvasBackgroundColor}
+            gridSamplingSize={gridSamplingSize}
+            setGridSamplingSize={setGridSamplingSize}
+            setSizeJitter={setSizeJitter}
+            setRotationJitter={setRotationJitter}
+            setEnableFlip={setEnableFlip}
+            setEnableMergeOptimization={setEnableMergeOptimization}
+            setCanvasBackgroundColor={setCanvasBackgroundColor}
+            renderTrigger={renderTrigger}
+            outputCanvasRef={outputCanvasRef}
+            showSettingsPanel={showSettingsPanel}
+            setShowSettingsPanel={setShowSettingsPanel}
+            handleMouseDown={handleMouseDown}
+            handleMouseMove={handleMouseMove}
+            handleMouseUp={handleMouseUp}
+            renderArt={handleRenderArt}
+          />
         </div>
       )}
 
       {/* Brush Edit Modal */}
       {editingBrushIndex !== null && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={closeBrushEditor}>
-          <div className="bg-zinc-800 rounded-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
-              <h3 className="font-semibold text-sm">笔触 - Level {editingBrushIndex}</h3>
-              <button onClick={closeBrushEditor} className="p-1 hover:bg-zinc-700 rounded">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            </div>
-
-            {/* Content: Canvas + Function Area */}
-            <div className="flex">
-              {/* Left: Brush Canvas - Larger and centered */}
-              <div className="p-4 flex items-center justify-center" style={{ width: '440px', height: '440px' }}>
-                <div className="w-[400px] h-[400px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900">
-                  {/* Checkerboard pattern for transparency */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      backgroundImage: `
-                        linear-gradient(45deg, #808080 25%, transparent 25%),
-                        linear-gradient(-45deg, #808080 25%, transparent 25%),
-                        linear-gradient(45deg, transparent 75%, #808080 75%),
-                        linear-gradient(-45deg, transparent 75%, #808080 75%)
-                      `,
-                      backgroundSize: '16px 16px',
-                      backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
-                      backgroundColor: '#c0c0c0'
-                    }}
-                  />
-                  <canvas
-                    ref={editingBrushCanvasRef}
-                    width={400}
-                    height={400}
-                    className="absolute inset-0 w-full h-full cursor-crosshair"
-                    onMouseDown={handleEditingMouseDown}
-                    onMouseMove={handleEditingMouseMove}
-                    onMouseUp={handleEditingMouseUp}
-                    onMouseLeave={handleEditingMouseUp}
-                  />
-                </div>
-              </div>
-
-              {/* Right: Function Area */}
-              <div className="p-4 pl-0 border-l border-zinc-700 w-[200px] flex flex-col">
-                {/* Tab Toggle Buttons - Tab style */}
-                <div className="flex border-b border-zinc-600 mb-3">
-                  <button
-                    onClick={() => {
-                      if (cameraStatus !== 'idle') {
-                        cancelCameraCapture();
-                      }
-                    }}
-                    className={`px-4 py-2 text-xs font-medium transition-colors ${
-                      cameraStatus === 'idle'
-                        ? 'text-white border-b-2 border-blue-500'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    涂鸦
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (cameraStatus === 'idle') {
-                        startCameraCapture();
-                      }
-                    }}
-                    className={`px-4 py-2 text-xs font-medium transition-colors ${
-                      cameraStatus !== 'idle'
-                        ? 'text-white border-b-2 border-blue-500'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    拍摄
-                  </button>
-                </div>
-
-                {/* 涂鸦状态: 画笔工具 */}
-                {cameraStatus === 'idle' && (
-                  <div className="space-y-3 flex-1">
-                    {/* Brush/Eraser */}
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setBrushMode('draw')}
-                        className={`flex-1 px-2 py-1.5 rounded text-xs ${brushMode === 'draw' ? 'bg-blue-600' : 'bg-zinc-700 hover:bg-zinc-600'}`}
-                      >
-                        画笔
-                      </button>
-                      <button
-                        onClick={() => setBrushMode('erase')}
-                        className={`flex-1 px-2 py-1.5 rounded text-xs ${brushMode === 'erase' ? 'bg-red-600' : 'bg-zinc-700 hover:bg-zinc-600'}`}
-                      >
-                        橡皮
-                      </button>
-                    </div>
-
-                    {/* Size slider */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                        <span>笔刷大小</span>
-                        <span>{brushSize}px</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="2"
-                        max="40"
-                        value={brushSize}
-                        onChange={(e) => setBrushSize(Number(e.target.value))}
-                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer"
-                      />
-                    </div>
-
-                    {/* Opacity slider */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                        <span>透明度</span>
-                        <span>{brushOpacity}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="10"
-                        max="100"
-                        value={brushOpacity}
-                        onChange={(e) => setBrushOpacity(Number(e.target.value))}
-                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer"
-                      />
-                    </div>
-
-                    {/* Color Palette - 2 rows */}
-                    <div>
-                      <span className="text-xs text-zinc-400 block mb-2">取色色盘</span>
-                      <div className="grid grid-cols-5 gap-1">
-                        {['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080', '#c0c0c0'].map((color) => (
-                          <button
-                            key={color}
-                            onClick={() => setBrushColor(color)}
-                            className={`w-7 h-7 rounded border-2 ${brushColor === color ? 'border-white' : 'border-transparent'} hover:scale-110 transition-transform`}
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Color preview - direct color input replaces preview */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={colorInputRef}
-                        type="color"
-                        value={brushColor}
-                        onChange={(e) => setBrushColor(e.target.value)}
-                        className="w-10 h-10 rounded border-2 border-zinc-400 cursor-pointer"
-                        title="选择颜色"
-                      />
-                    </div>
-
-                    {/* Clear button */}
-                    <button
-                      onClick={() => {
-                        if (editingBrushCanvasRef.current) {
-                          const ctx = editingBrushCanvasRef.current.getContext('2d');
-                          if (ctx) ctx.clearRect(0, 0, 400, 400);
-                        }
-                      }}
-                      className="w-full px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-xs"
-                    >
-                      清除画面
-                    </button>
-                  </div>
-                )}
-
-                {/* 拍摄状态 - 取景器 */}
-                {cameraStatus === 'viewing' && cameraStream && (
-                  <div className="flex-1 flex flex-col">
-                    <div className="w-[180px] h-[180px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900 mb-3">
-                      <video
-                        ref={cameraVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="absolute inset-0 w-full h-full object-contain"
-                      />
-                      <canvas ref={cameraPreviewRef} className="hidden" />
-                    </div>
-                    <div className="flex gap-2 mt-auto">
-                      <button
-                        onClick={takePhoto}
-                        className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-medium text-white"
-                      >
-                        拍摄
-                      </button>
-                      <button
-                        onClick={cancelCameraCapture}
-                        className="flex-1 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-sm text-white"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 拍摄状态 - 图像调整 */}
-                {cameraStatus === 'adjusting' && (
-                  <div className="space-y-3 flex-1">
-                    <div className="text-xs text-zinc-400 mb-2">图像调整</div>
-
-                    {/* 去背景 */}
-                    <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={removeWhiteBg}
-                        onChange={(e) => { setRemoveWhiteBg(e.target.checked); applyImageAdjustments(); }}
-                        className="w-3 h-3 rounded border-zinc-500"
-                      />
-                      <span>去背景</span>
-                    </label>
-                    {removeWhiteBg && (
-                      <div className="pl-5">
-                        <span className="text-xs text-zinc-500">阈值: {bgRemoveStrength}</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="255"
-                          value={bgRemoveStrength}
-                          onChange={(e) => { setBgRemoveStrength(Number(e.target.value)); applyImageAdjustments(); }}
-                          className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                        />
-                      </div>
-                    )}
-
-                    {/* 亮度 */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-500">
-                        <span>亮度</span>
-                        <span>{imageBrightness}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="200"
-                        value={imageBrightness}
-                        onChange={(e) => { setImageBrightness(Number(e.target.value)); applyImageAdjustments(); }}
-                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                      />
-                    </div>
-
-                    {/* 对比度 */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-500">
-                        <span>对比度</span>
-                        <span>{imageContrast}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="200"
-                        value={imageContrast}
-                        onChange={(e) => { setImageContrast(Number(e.target.value)); applyImageAdjustments(); }}
-                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                      />
-                    </div>
-
-                    {/* 饱和度 */}
-                    <div>
-                      <div className="flex justify-between text-xs text-zinc-500">
-                        <span>饱和度</span>
-                        <span>{imageSaturation}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="200"
-                        value={imageSaturation}
-                        onChange={(e) => { setImageSaturation(Number(e.target.value)); applyImageAdjustments(); }}
-                        className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
-                      />
-                    </div>
-
-                    {/* 确认按钮 */}
-                    <button
-                      onClick={confirmPhoto}
-                      className="w-full mt-auto px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium text-white"
-                    >
-                      确定
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Footer: Save/Cancel buttons */}
-            <div className="px-4 py-3 border-t border-zinc-700 flex items-center justify-end gap-2">
-              <button
-                onClick={closeBrushEditor}
-                className="px-4 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-xs"
-              >
-                取消
-              </button>
-              <button
-                onClick={saveBrushEditor}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
+        <BrushEditorModal
+          editingBrushIndex={editingBrushIndex}
+          editingBrushCanvasRef={editingBrushCanvasRef}
+          editingLayerIndexRef={editingLayerIndexRef}
+          editingOriginalImageRef={editingOriginalImageRef}
+          editingSnapshotRef={editingSnapshotRef}
+          cameraStream={cameraStream}
+          cameraVideoRef={cameraVideoRef}
+          cameraPreviewRef={cameraPreviewRef}
+          adjustmentPreviewRef={adjustmentPreviewRef}
+          cameraStatus={cameraStatus}
+          brushMode={brushMode}
+          brushSize={brushSize}
+          brushOpacity={brushOpacity}
+          brushColor={brushColor}
+          removeWhiteBg={removeWhiteBg}
+          bgRemoveStrength={bgRemoveStrength}
+          imageBrightness={imageBrightness}
+          imageContrast={imageContrast}
+          imageSaturation={imageSaturation}
+          colorInputRef={colorInputRef}
+          brushLayersRef={brushLayersRef}
+          onBrushModeChange={setBrushMode}
+          onBrushSizeChange={setBrushSize}
+          onBrushOpacityChange={setBrushOpacity}
+          onBrushColorChange={setBrushColor}
+          onRemoveWhiteBgChange={(v) => { setRemoveWhiteBg(v); applyImageAdjustments(); }}
+          onBgRemoveStrengthChange={(v) => { setBgRemoveStrength(v); applyImageAdjustments(); }}
+          onBrightnessChange={(v) => { setImageBrightness(v); applyImageAdjustments(); }}
+          onContrastChange={(v) => { setImageContrast(v); applyImageAdjustments(); }}
+          onSaturationChange={(v) => { setImageSaturation(v); applyImageAdjustments(); }}
+          onStartCameraCapture={startCameraCapture}
+          onCancelCameraCapture={cancelCameraCapture}
+          onTakePhoto={takePhoto}
+          onConfirmPhoto={confirmPhoto}
+          onClose={closeBrushEditor}
+          onSave={saveBrushEditor}
+          handleEditingMouseDown={handleEditingMouseDown}
+          handleEditingMouseMove={handleEditingMouseMove}
+          handleEditingMouseUp={handleEditingMouseUp}
+        />
       )}
 
       {/* Brush Library Modal */}
       {showBrushLibrary && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setShowBrushLibrary(false)}>
-          <div className="bg-zinc-800 rounded-2xl overflow-hidden w-[400px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
-              <h3 className="font-semibold text-sm">笔刷库</h3>
-              <button onClick={() => setShowBrushLibrary(false)} className="p-1 hover:bg-zinc-700 rounded">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto">
-              {/* Save current brushes */}
-              <div className="mb-4 p-3 bg-zinc-700 rounded-lg">
-                <p className="text-xs text-zinc-400 mb-2">保存当前笔刷套图为预设</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="预设名称..."
-                    value={currentPresetName}
-                    onChange={(e) => setCurrentPresetName(e.target.value)}
-                    className="flex-1 px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-xs text-white"
-                  />
-                  <button
-                    onClick={() => {
-                      if (currentPresetName.trim()) {
-                        saveCurrentBrushAsPreset(currentPresetName.trim());
-                      }
-                    }}
-                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs"
-                  >
-                    保存
-                  </button>
-                </div>
-              </div>
-
-              {/* Preset list */}
-              {brushPresets.length === 0 ? (
-                <p className="text-xs text-zinc-500 text-center py-4">暂无保存的笔刷预设</p>
-              ) : (
-                <div className="space-y-3">
-                  {brushPresets.map((preset) => (
-                    <div
-                      key={preset.id}
-                      className="p-3 bg-zinc-700 rounded-lg cursor-grab active:cursor-grabbing hover:bg-zinc-600 transition-colors"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, preset.id)}
-                      onDragEnd={handleDragEnd}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">{preset.name}</span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              loadPresetToCanvas(preset);
-                              setShowBrushLibrary(false);
-                            }}
-                            className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs"
-                          >
-                            应用
-                          </button>
-                          <button
-                            onClick={() => deletePreset(preset.id)}
-                            className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-xs"
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                      {/* Preview thumbnails */}
-                      <div className="flex gap-1">
-                        {preset.layers.map((dataUrl, idx) => (
-                          <div
-                            key={idx}
-                            className="w-6 h-6 bg-zinc-800 rounded border border-zinc-600 overflow-hidden"
-                          >
-                            {dataUrl && (
-                              <img
-                                src={dataUrl}
-                                alt={`Level ${idx}`}
-                                className="w-full h-full object-contain"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <BrushLibrary
+          brushPresets={brushPresets}
+          currentPresetName={currentPresetName}
+          onPresetNameChange={setCurrentPresetName}
+          onSaveCurrentAsPreset={saveCurrentBrushAsPreset}
+          onLoadPreset={loadPresetToCanvas}
+          onDeletePreset={deletePreset}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onClose={() => setShowBrushLibrary(false)}
+        />
       )}
 
       {/* Persistent Brush Canvases - Always rendered, never unmounted */}
