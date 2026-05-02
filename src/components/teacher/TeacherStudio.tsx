@@ -540,6 +540,20 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   // 启动摄像头拍摄
   const startCameraCapture = async () => {
     try {
+      // 重置图像调节值到初始状态
+      setBgRemoveStrength(256);
+      setImageBrightness(100);
+      setImageContrast(100);
+      setImageSaturation(100);
+      setRemoveWhiteBg(true);
+
+      // 同时更新 ref 值
+      bgRemoveStrengthRef.current = 256;
+      imageBrightnessRef.current = 100;
+      imageContrastRef.current = 100;
+      imageSaturationRef.current = 100;
+      removeWhiteBgRef.current = true;
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 800, height: 800, facingMode: 'environment' }
       });
@@ -1391,18 +1405,6 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                   <button
                     onClick={() => {
                       if (cameraStatus === 'idle') {
-                        // Reset adjustment values to initial defaults (sync refs first)
-                        removeWhiteBgRef.current = true;
-                        bgRemoveStrengthRef.current = 256;
-                        imageBrightnessRef.current = 100;
-                        imageContrastRef.current = 100;
-                        imageSaturationRef.current = 100;
-                        setImageBrightness(100);
-                        setImageContrast(100);
-                        setImageSaturation(100);
-                        setBgRemoveStrength(256);
-                        setRemoveWhiteBg(true);
-                        editingOriginalImageRef.current = null;
                         startCameraCapture();
                       }
                     }}
