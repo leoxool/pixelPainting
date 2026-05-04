@@ -180,6 +180,7 @@ export function BrushGrid({
   const hoveredSpriteRef = useRef<BrushSpriteData | null>(null);
   const textureCacheRef = useRef<Map<string, Texture>>(new Map());
   const isActiveRef = useRef(true);
+  const draggingPresetIdRef = useRef<string | null>(null);
   const [presetsWithMetrics, setPresetsWithMetrics] = useState<BrushWithMetrics[]>([]);
   const [isReady, setIsReady] = useState(false);
 
@@ -338,18 +339,10 @@ export function BrushGrid({
         brushData.targetScale = 1;
       });
 
-      // Drag events - use native DOM event from view
-      container.on('pointerdown', (e) => {
-        const nativeEvent = (e as unknown as { event: DragEvent }).event;
-        if (nativeEvent?.dataTransfer) {
-          nativeEvent.dataTransfer.effectAllowed = 'copy';
-          nativeEvent.dataTransfer.setData('text/plain', preset.id);
-          onPresetDragStart(nativeEvent as unknown as React.DragEvent, preset.id);
-        }
-      });
-
-      container.on('pointerup', () => {
-        onPresetDragEnd();
+      // Store preset ID on pointerdown for native drag handling
+      container.on('pointerdown', () => {
+        if (!isEffectActive) return;
+        draggingPresetIdRef.current = preset.id;
       });
 
       gridContainer.addChild(container);
@@ -511,8 +504,23 @@ export function BrushGrid({
       ref={containerRef}
       className="overflow-auto"
       style={{ width: containerWidth, height: containerHeight }}
+      draggable={true}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onDragStart={(e) => {
+        const presetId = draggingPresetIdRef.current;
+        if (!presetId) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('text/plain', presetId);
+        e.dataTransfer.effectAllowed = 'copy';
+        onPresetDragStart(e, presetId);
+      }}
+      onDragEnd={() => {
+        draggingPresetIdRef.current = null;
+        onPresetDragEnd();
+      }}
     />
   );
 }
