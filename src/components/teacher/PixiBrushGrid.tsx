@@ -179,6 +179,7 @@ export function BrushGrid({
   const brushSpritesRef = useRef<BrushSpriteData[]>([]);
   const hoveredSpriteRef = useRef<BrushSpriteData | null>(null);
   const textureCacheRef = useRef<Map<string, Texture>>(new Map());
+  const isActiveRef = useRef(true);
   const [presetsWithMetrics, setPresetsWithMetrics] = useState<BrushWithMetrics[]>([]);
   const [isReady, setIsReady] = useState(false);
 
@@ -236,6 +237,7 @@ export function BrushGrid({
     if (!appRef.current || !isReady) return;
 
     const app = appRef.current;
+    let isEffectActive = true;
 
     // Clear existing sprites
     brushSpritesRef.current.forEach((brushData) => {
@@ -248,6 +250,10 @@ export function BrushGrid({
     }
 
     const gridContainer = new Container();
+    if (!isEffectActive) {
+      gridContainer.destroy({ children: true });
+      return;
+    }
     app.stage.addChild(gridContainer);
 
     const loadTexture = async (preset: BrushWithMetrics): Promise<Texture | null> => {
@@ -269,6 +275,8 @@ export function BrushGrid({
     };
 
     const createBrushSprite = async (preset: BrushWithMetrics, index: number) => {
+      if (!isEffectActive) return;
+
       const col = index % columns;
       const row = Math.floor(index / columns);
       const x = col * (brushSize + GRID_SPACING) + brushSize / 2;
@@ -288,6 +296,7 @@ export function BrushGrid({
 
       // Sprite
       const texture = await loadTexture(preset);
+      if (!isEffectActive) return;
       let sprite: Sprite | null = null;
 
       if (texture) {
@@ -333,11 +342,13 @@ export function BrushGrid({
 
       // Hover events
       container.on('pointerover', () => {
+        if (!isEffectActive) return;
         hoveredSpriteRef.current = brushData;
         brushData.targetScale = 1.15;
       });
 
       container.on('pointerout', () => {
+        if (!isEffectActive) return;
         if (hoveredSpriteRef.current === brushData) {
           hoveredSpriteRef.current = null;
         }
@@ -370,6 +381,7 @@ export function BrushGrid({
     // Animation ticker
     const ticker = app.ticker;
     const animate = () => {
+      if (!isEffectActive) return;
       brushSpritesRef.current.forEach((brushData) => {
         if (brushData.currentScale !== brushData.targetScale) {
           const diff = brushData.targetScale - brushData.currentScale;
@@ -384,11 +396,28 @@ export function BrushGrid({
         }
       });
     };
+
+    // Only add ticker if app is still valid
+    if (!appRef.current) {
+      gridContainer.destroy({ children: true });
+      return;
+    }
+
     ticker.add(animate);
 
     return () => {
-      ticker.remove(animate);
-      gridContainer.destroy({ children: true });
+      isEffectActive = false;
+      if (!appRef.current) return;
+      try {
+        ticker.remove(animate);
+      } catch {
+        // Ticker may already be destroyed
+      }
+      try {
+        gridContainer.destroy({ children: true });
+      } catch {
+        // Container may already be destroyed
+      }
     };
   }, [isReady, sortedPresets, columns, brushSize, onPresetDragStart, onPresetDragEnd]);
 
