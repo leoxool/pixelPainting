@@ -215,11 +215,26 @@ export function BrushGrid({
       });
 
       const canvas = app.canvas as HTMLCanvasElement;
-      canvas.draggable = true;
       canvas.style.cursor = 'grab';
       containerRef.current!.appendChild(canvas);
       appRef.current = app;
+
+      // Global pointerup to end drag (in case user releases outside any brush)
+      const handleGlobalPointerUp = () => {
+        if (draggingPresetIdRef.current) {
+          draggingPresetIdRef.current = null;
+          onPresetDragEnd();
+        }
+      };
+      app.stage.eventMode = 'static';
+      app.stage.hitArea = app.screen;
+      app.stage.on('pointerup', handleGlobalPointerUp);
+
       setIsReady(true);
+
+      return () => {
+        app.stage.off('pointerup', handleGlobalPointerUp);
+      };
     };
 
     initApp();
@@ -231,39 +246,7 @@ export function BrushGrid({
       }
       textureCacheRef.current.clear();
     };
-  }, [containerWidth, containerHeight]);
-
-  // Set up native drag events on PIXI canvas - canvas itself is draggable
-  useEffect(() => {
-    if (!appRef.current || !isReady) return;
-
-    const canvas = appRef.current.canvas as HTMLCanvasElement;
-    if (!canvas) return;
-
-    const handleDragStart = (e: DragEvent) => {
-      const presetId = draggingPresetIdRef.current;
-      if (!presetId) {
-        e.preventDefault();
-        return;
-      }
-      e.dataTransfer!.effectAllowed = 'copy';
-      e.dataTransfer!.setData('text/plain', presetId);
-      onPresetDragStart(e as unknown as React.DragEvent, presetId);
-    };
-
-    const handleDragEnd = () => {
-      draggingPresetIdRef.current = null;
-      onPresetDragEnd();
-    };
-
-    canvas.addEventListener('dragstart', handleDragStart);
-    canvas.addEventListener('dragend', handleDragEnd);
-
-    return () => {
-      canvas.removeEventListener('dragstart', handleDragStart);
-      canvas.removeEventListener('dragend', handleDragEnd);
-    };
-  }, [isReady, onPresetDragStart, onPresetDragEnd]);
+  }, [containerWidth, containerHeight, onPresetDragEnd]);
 
   // Create or update brush sprites
   useEffect(() => {
@@ -354,10 +337,18 @@ export function BrushGrid({
         preset,
       };
 
-      // Store preset ID on pointerdown for native drag handling
+      // Store preset ID on pointerdown for drag handling
       container.on('pointerdown', () => {
         if (!isEffectActive) return;
         draggingPresetIdRef.current = preset.id;
+        // Create mock drag event for parent compatibility
+        const mockEvent = {
+          dataTransfer: {
+            setData: () => {},
+            effectAllowed: 'copy',
+          },
+        } as unknown as React.DragEvent;
+        onPresetDragStart(mockEvent, preset.id);
       });
 
       gridContainer.addChild(container);
