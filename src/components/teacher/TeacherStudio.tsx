@@ -8,10 +8,11 @@ import { BrushEditorModal } from './BrushEditorModal';
 import { BrushLibraryPanel } from './BrushLibraryPanel';
 import { BrushCanvas } from './BrushCanvas';
 import { BrushLayerGrid } from './BrushLayerGrid';
+import { BrushGroupEditor } from './BrushGroupEditor';
 import { DataSourcePanel } from './RenderOutput/DataSourcePanel';
 import { RenderOutputPanel } from './RenderOutput';
 import { getLevelGray, extractGridData, renderArt } from './gridUtils';
-import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset } from '@/lib/db';
+import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset, getBrushGroups as dbGetBrushGroups, saveBrushGroups as dbSaveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 import JSZip from 'jszip';
 
 type DataSource = 'webcam' | 'image';
@@ -29,6 +30,13 @@ interface BrushPreset {
   timestamp: number;
   // 每层笔触的 base64 图像数据
   layers: (string | null)[];
+}
+
+interface BrushGroup {
+  id: string;
+  name: string;
+  timestamp: number;
+  slots: (string | null)[];  // 10个笔刷preset ID，对应灰度级0-9
 }
 
 interface GridCell {
@@ -137,6 +145,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const [brushUpdateTrigger, setBrushUpdateTrigger] = useState(0);
   // 待应用的笔刷图像数据（从调整预览复制到编辑器）
   const [pendingBrushImageData, setPendingBrushImageData] = useState<ImageData | null>(null);
+
+  // 笔刷组编辑相关状态
+  const [brushGroupSlots, setBrushGroupSlots] = useState<(BrushPreset | null)[]>(Array(10).fill(null));
+  // 用于触发笔刷组列表更新
+  const [brushGroupUpdateTrigger, setBrushGroupUpdateTrigger] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -258,6 +271,65 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     const updated = brushPresets.filter(p => p.id !== id);
     saveBrushPresets(updated);
   }, [brushPresets, saveBrushPresets]);
+
+  // 笔刷组操作
+  const handleBrushGroupSlotChange = useCallback((index: number, preset: BrushPreset | null) => {
+    setBrushGroupSlots(prev => {
+      const updated = [...prev];
+      updated[index] = preset;
+      return updated;
+    });
+  }, []);
+
+  const handleSaveBrushGroup = useCallback(async (name: string) => {
+    const group: BrushGroup = {
+      id: Date.now().toString(),
+      name,
+      timestamp: Date.now(),
+      slots: brushGroupSlots.map(p => p?.id || null),
+    };
+    try {
+      const existing = await dbGetBrushGroups();
+      await dbSaveBrushGroups([...existing, group]);
+      // Trigger reload of brush groups in editor
+      setBrushGroupUpdateTrigger(t => t + 1);
+      alert('笔刷组已保存！');
+    } catch (e) {
+      console.error('Failed to save brush group:', e);
+    }
+  }, [brushGroupSlots]);
+
+  const handleLoadBrushGroup = useCallback((group: BrushGroup) => {
+    const loadedSlots: (BrushPreset | null)[] = group.slots.map(slotId => {
+      if (!slotId) return null;
+      return brushPresets.find(p => p.id === slotId) || null;
+    });
+    setBrushGroupSlots(loadedSlots);
+
+    // Also load the brush images to brushLayersRef for rendering
+    group.slots.forEach((slotId, index) => {
+      if (!slotId) return;
+      const preset = brushPresets.find(p => p.id === slotId);
+      if (!preset || !preset.layers[0]) return;
+
+      const canvas = brushCanvasesRef.current[index];
+      if (!canvas) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+          ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+          brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
+        }
+      };
+      img.src = preset.layers[0];
+    });
+
+    setBrushUpdateTrigger(t => t + 1);
+    setRenderTrigger(t => t + 1);
+  }, [brushPresets]);
 
   // 从条带图导入笔刷（1000x100 切割成 10 个 100x100）
   const importBrushStrip = useCallback(async (imageUrl: string): Promise<void> => {
@@ -1533,15 +1605,19 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
               </div>
             </>
           ) : (
-            /* Group Brush Edit Mode (Default) */
-            <BrushLayerGrid
-              brushUpdateTrigger={brushUpdateTrigger}
-              draggedBrushId={draggedBrushId}
-              onLayerClick={openBrushEditor}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              getLevelGray={getLevelGray}
-            />
+            /* Group Brush Edit Mode - New BrushGroupEditor */
+            <div className="flex-1">
+              <BrushGroupEditor
+                brushPresets={brushPresets}
+                slots={brushGroupSlots}
+                onSlotChange={handleBrushGroupSlotChange}
+                onSlotClick={openBrushEditor}
+                onSaveGroup={handleSaveBrushGroup}
+                brushUpdateTrigger={brushUpdateTrigger}
+                onLoadGroup={handleLoadBrushGroup}
+                brushGroupUpdateTrigger={brushGroupUpdateTrigger}
+              />
+            </div>
           )}
         </div>
       ) : (
