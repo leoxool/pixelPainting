@@ -126,27 +126,38 @@ function calculateGridDimensions(
     return { columns: 1, rows: 0, brushSize: GRID_MIN_BRUSH_SIZE };
   }
 
-  const minColumns = Math.max(1, Math.floor((containerWidth + GRID_SPACING) / (GRID_MAX_BRUSH_SIZE + GRID_SPACING)));
-  const maxColumns = Math.min(itemCount, Math.floor((containerWidth + GRID_SPACING) / (GRID_MIN_BRUSH_SIZE + GRID_SPACING)));
+  // Maximum columns that fit within container width at minimum brush size
+  const maxColumnsBasedOnWidth = Math.floor((containerWidth + GRID_SPACING) / (GRID_MIN_BRUSH_SIZE + GRID_SPACING));
+  const maxColumns = Math.min(itemCount, Math.max(1, maxColumnsBasedOnWidth));
 
+  // Try to find columns that fit within container height
   let bestColumns = maxColumns;
   let bestBrushSize = GRID_MIN_BRUSH_SIZE;
+  let foundFit = false;
 
-  for (let cols = maxColumns; cols >= minColumns; cols--) {
+  // Start from most columns (smallest brushes) and work up
+  for (let cols = maxColumns; cols >= 1; cols--) {
     const availableWidth = containerWidth - (cols - 1) * GRID_SPACING;
     const brushSize = Math.floor(availableWidth / cols);
     const rows = Math.ceil(itemCount / cols);
     const totalHeight = rows * brushSize + (rows - 1) * GRID_SPACING;
 
+    // Check if this fits within container height
     if (totalHeight <= containerHeight && brushSize >= GRID_MIN_BRUSH_SIZE) {
       bestColumns = cols;
       bestBrushSize = Math.min(brushSize, GRID_MAX_BRUSH_SIZE);
+      foundFit = true;
       break;
     }
+  }
 
-    if (cols === maxColumns) {
-      bestBrushSize = Math.min(brushSize, GRID_MAX_BRUSH_SIZE);
-    }
+  // If no fit found, use maximum columns and allow overflow
+  if (!foundFit) {
+    bestColumns = maxColumns;
+    const availableWidth = containerWidth - (bestColumns - 1) * GRID_SPACING;
+    bestBrushSize = Math.floor(availableWidth / bestColumns);
+    // Ensure at least minimum size
+    bestBrushSize = Math.max(bestBrushSize, GRID_MIN_BRUSH_SIZE);
   }
 
   const rows = Math.ceil(itemCount / bestColumns);
