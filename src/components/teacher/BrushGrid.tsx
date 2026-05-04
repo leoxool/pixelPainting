@@ -194,9 +194,14 @@ export function BrushGrid({
     [presetsWithMetrics, sortRule]
   );
 
+  // Account for padding (16px on each side)
+  const PADDING = 32;
+  const availableWidth = Math.max(containerWidth - PADDING, 100);
+  const availableHeight = Math.max(containerHeight - PADDING, 100);
+
   const { columns, brushSize } = useMemo(
-    () => calculateGridDimensions(containerWidth, containerHeight, sortedPresets.length),
-    [containerWidth, containerHeight, sortedPresets.length]
+    () => calculateGridDimensions(availableWidth, availableHeight, sortedPresets.length),
+    [availableWidth, availableHeight, sortedPresets.length]
   );
 
   const handleDragStart = useCallback((e: React.DragEvent, presetId: string) => {
@@ -218,7 +223,7 @@ export function BrushGrid({
 
   return (
     <div
-      className="overflow-auto p-4"
+      className="overflow-auto p-4 box-border"
       style={{ width: containerWidth, height: containerHeight }}
       onDragOver={handleDragOver}
       onDrop={(e) => onSlotDrop(e, -1)}
@@ -232,7 +237,7 @@ export function BrushGrid({
         {sortedPresets.map((preset) => (
           <div
             key={preset.id}
-            className={`relative rounded border-2 cursor-grab active:cursor-grabbing border-zinc-600`}
+            className={`relative rounded border-2 cursor-grab active:cursor-grabbing border-zinc-600 flex-shrink-0`}
             style={{ width: brushSize, height: brushSize }}
             draggable
             onDragStart={(e) => handleDragStart(e, preset.id)}
