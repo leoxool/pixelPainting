@@ -1762,24 +1762,39 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                   暂无保存的笔刷组
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
                   {brushGroupsForLoad.map((group) => (
-                    <button
+                    <div
                       key={group.id}
+                      className="p-3 bg-zinc-700 rounded-lg hover:bg-zinc-600 cursor-pointer transition-colors"
                       onClick={() => {
                         handleLoadBrushGroup(group);
                         setShowBrushGroupLoadModal(false);
                       }}
-                      className="p-3 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-left transition-colors"
                     >
-                      <div className="text-sm font-medium truncate">{group.name}</div>
-                      <div className="text-xs text-zinc-400 mt-1">
-                        {new Date(group.timestamp).toLocaleDateString()}
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium truncate">{group.name}</div>
+                        <div className="text-xs text-zinc-400">
+                          {new Date(group.timestamp).toLocaleDateString()}
+                        </div>
                       </div>
-                      <div className="text-xs text-zinc-500 mt-1">
-                        {group.slots.filter(Boolean).length} / 10 笔刷
+                      <div className="flex gap-1 mt-2">
+                        {group.slots.map((slotId, i) => {
+                          const preset = brushPresets.find(p => p.id === slotId);
+                          const layerData = preset?.layers[0];
+                          return (
+                            <div
+                              key={i}
+                              className="w-6 h-6 bg-zinc-600 rounded border border-zinc-500 overflow-hidden"
+                            >
+                              {layerData && (
+                                <img src={layerData} alt="" className="w-full h-full object-contain" />
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
