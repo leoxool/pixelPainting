@@ -1616,6 +1616,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                 onSlotChange={handleBrushGroupSlotChange}
                 onSlotClick={openBrushEditor}
                 onSaveGroup={handleSaveBrushGroup}
+                onClearAll={() => setBrushGroupSlots(Array(10).fill(null))}
                 brushUpdateTrigger={brushUpdateTrigger}
                 onLoadGroup={handleLoadBrushGroup}
                 brushGroupUpdateTrigger={brushGroupUpdateTrigger}

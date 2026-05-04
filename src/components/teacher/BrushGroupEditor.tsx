@@ -12,6 +12,7 @@ interface BrushGroupEditorProps {
   onSlotChange: (index: number, preset: BrushPreset | null) => void;
   onSlotClick: (index: number) => void;
   onSaveGroup: (name: string) => void;
+  onClearAll: () => void;
   brushUpdateTrigger: number;
   onLoadGroup: (group: BrushGroup) => void;
   brushGroupUpdateTrigger?: number;
@@ -23,6 +24,7 @@ export function BrushGroupEditor({
   onSlotChange,
   onSlotClick,
   onSaveGroup,
+  onClearAll,
   brushUpdateTrigger,
   onLoadGroup,
   brushGroupUpdateTrigger = 0,
@@ -134,17 +136,30 @@ export function BrushGroupEditor({
               笔刷组库
             </button>
           </div>
-          <button
-            onClick={handleSaveGroup}
-            disabled={!canSave}
-            className={`px-3 py-1 rounded text-xs font-medium ${
-              canSave
-                ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
-            }`}
-          >
-            保存笔刷组
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClearAll}
+              disabled={filledSlots === 0}
+              className={`px-3 py-1 rounded text-xs font-medium ${
+                filledSlots > 0
+                  ? 'bg-red-600 hover:bg-red-500 text-white'
+                  : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+              }`}
+            >
+              清空
+            </button>
+            <button
+              onClick={handleSaveGroup}
+              disabled={!canSave}
+              className={`px-3 py-1 rounded text-xs font-medium ${
+                canSave
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                  : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+              }`}
+            >
+              保存笔刷组
+            </button>
+          </div>
         </div>
         {/* 10 slots horizontally */}
         <div className="flex justify-center gap-2">
