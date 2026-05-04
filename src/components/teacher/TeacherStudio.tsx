@@ -133,6 +133,9 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const imageBrightnessRef = useRef(100);
   const imageSaturationRef = useRef(100);
   const [showBrushLibrary, setShowBrushLibrary] = useState(false);
+  // 加载笔刷组弹窗
+  const [showBrushGroupLoadModal, setShowBrushGroupLoadModal] = useState(false);
+  const [brushGroupsForLoad, setBrushGroupsForLoad] = useState<BrushGroup[]>([]);
   // 笔刷编辑模式切换: 'single'=单个笔刷编辑, 'group'=笔刷组编辑
   const [brushEditMode, setBrushEditMode] = useState<'single' | 'group'>('single');
   // 单个笔刷编辑相关状态
@@ -1631,7 +1634,13 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
             onStartWebcam={startWebcam}
             onStopWebcam={stopWebcam}
             onImageUpload={handleImageUpload}
-            onOpenBrushLibrary={() => setShowBrushLibrary(true)}
+            onOpenBrushLibrary={() => {
+              // Load brush groups from IndexedDB and show the load modal
+              dbGetBrushGroups().then(groups => {
+                setBrushGroupsForLoad(groups);
+                setShowBrushGroupLoadModal(true);
+              });
+            }}
             imageInputRef={imageInputRef}
             videoRef={videoRef}
           />
@@ -1732,6 +1741,50 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
           onDragEnd={handleDragEnd}
           onClose={() => setShowBrushLibrary(false)}
         />
+      )}
+
+      {/* Brush Group Load Modal for Render Output */}
+      {showBrushGroupLoadModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setShowBrushGroupLoadModal(false)}>
+          <div className="bg-zinc-800 rounded-2xl w-[500px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
+              <h3 className="font-semibold text-sm">加载笔刷组</h3>
+              <button onClick={() => setShowBrushGroupLoadModal(false)} className="p-1 hover:bg-zinc-700 rounded">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {brushGroupsForLoad.length === 0 ? (
+                <div className="text-center text-zinc-500 py-8">
+                  暂无保存的笔刷组
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {brushGroupsForLoad.map((group) => (
+                    <button
+                      key={group.id}
+                      onClick={() => {
+                        handleLoadBrushGroup(group);
+                        setShowBrushGroupLoadModal(false);
+                      }}
+                      className="p-3 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-left transition-colors"
+                    >
+                      <div className="text-sm font-medium truncate">{group.name}</div>
+                      <div className="text-xs text-zinc-400 mt-1">
+                        {new Date(group.timestamp).toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {group.slots.filter(Boolean).length} / 10 笔刷
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Persistent Brush Canvases - Always rendered, never unmounted */}
