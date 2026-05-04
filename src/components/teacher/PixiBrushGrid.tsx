@@ -294,13 +294,14 @@ export function BrushGrid({
       border.stroke({ width: 2, color: 0x52525b });
       container.addChild(border);
 
-      // Sprite
+      // Sprite - anchor at center so it aligns with container center
       const texture = await loadTexture(preset);
       if (!isEffectActive) return;
       let sprite: Sprite | null = null;
 
       if (texture) {
         sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 0.5);
         const scale = Math.min(brushSize / texture.width, brushSize / texture.height);
         sprite.scale.set(scale);
         container.addChild(sprite);
@@ -311,30 +312,12 @@ export function BrushGrid({
         container.addChild(placeholder);
       }
 
-      // Label
-      const labelStyle = new TextStyle({
-        fontFamily: 'Inter, system-ui, sans-serif',
-        fontSize: Math.max(10, Math.floor(brushSize / 8)),
-        fill: 0xffffff,
-        wordWrap: true,
-        wordWrapWidth: brushSize - 4,
-        align: 'center',
-      });
-      const label = new Text({
-        text: preset.name,
-        style: labelStyle,
-      });
-      label.anchor.set(0.5, 1);
-      label.x = 0;
-      label.y = brushSize / 2 - 2;
-      container.addChild(label);
-
       // Data binding
       const brushData: BrushSpriteData = {
         container,
         sprite: sprite!,
         border,
-        label,
+        label: new Text({ text: '' }), // Empty label placeholder
         preset,
         targetScale: 1,
         currentScale: 1,
