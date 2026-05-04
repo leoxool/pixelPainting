@@ -32,8 +32,6 @@ interface BrushSpriteData {
   border: Graphics;
   label: Text;
   preset: BrushWithMetrics;
-  targetScale: number;
-  currentScale: number;
 }
 
 function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
@@ -177,7 +175,6 @@ export function BrushGrid({
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const brushSpritesRef = useRef<BrushSpriteData[]>([]);
-  const hoveredSpriteRef = useRef<BrushSpriteData | null>(null);
   const textureCacheRef = useRef<Map<string, Texture>>(new Map());
   const isActiveRef = useRef(true);
   const draggingPresetIdRef = useRef<string | null>(null);
@@ -217,7 +214,10 @@ export function BrushGrid({
         autoDensity: true,
       });
 
-      containerRef.current!.appendChild(app.canvas as HTMLCanvasElement);
+      const canvas = app.canvas as HTMLCanvasElement;
+      canvas.draggable = true;
+      canvas.style.cursor = 'grab';
+      containerRef.current!.appendChild(canvas);
       appRef.current = app;
       setIsReady(true);
     };
@@ -232,6 +232,38 @@ export function BrushGrid({
       textureCacheRef.current.clear();
     };
   }, [containerWidth, containerHeight]);
+
+  // Set up native drag events on PIXI canvas - canvas itself is draggable
+  useEffect(() => {
+    if (!appRef.current || !isReady) return;
+
+    const canvas = appRef.current.canvas as HTMLCanvasElement;
+    if (!canvas) return;
+
+    const handleDragStart = (e: DragEvent) => {
+      const presetId = draggingPresetIdRef.current;
+      if (!presetId) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer!.effectAllowed = 'copy';
+      e.dataTransfer!.setData('text/plain', presetId);
+      onPresetDragStart(e as unknown as React.DragEvent, presetId);
+    };
+
+    const handleDragEnd = () => {
+      draggingPresetIdRef.current = null;
+      onPresetDragEnd();
+    };
+
+    canvas.addEventListener('dragstart', handleDragStart);
+    canvas.addEventListener('dragend', handleDragEnd);
+
+    return () => {
+      canvas.removeEventListener('dragstart', handleDragStart);
+      canvas.removeEventListener('dragend', handleDragEnd);
+    };
+  }, [isReady, onPresetDragStart, onPresetDragEnd]);
 
   // Create or update brush sprites
   useEffect(() => {
@@ -320,24 +352,7 @@ export function BrushGrid({
         border,
         label: new Text({ text: '' }), // Empty label placeholder
         preset,
-        targetScale: 1,
-        currentScale: 1,
       };
-
-      // Hover events
-      container.on('pointerover', () => {
-        if (!isEffectActive) return;
-        hoveredSpriteRef.current = brushData;
-        brushData.targetScale = 1.15;
-      });
-
-      container.on('pointerout', () => {
-        if (!isEffectActive) return;
-        if (hoveredSpriteRef.current === brushData) {
-          hoveredSpriteRef.current = null;
-        }
-        brushData.targetScale = 1;
-      });
 
       // Store preset ID on pointerdown for native drag handling
       container.on('pointerdown', () => {
@@ -354,64 +369,16 @@ export function BrushGrid({
       createBrushSprite(preset, index);
     });
 
-    // Animation ticker
-    const ticker = app.ticker;
-    const animate = () => {
-      if (!isEffectActive) return;
-      brushSpritesRef.current.forEach((brushData) => {
-        if (brushData.currentScale !== brushData.targetScale) {
-          const diff = brushData.targetScale - brushData.currentScale;
-          const step = diff * 0.15;
-          brushData.currentScale += step;
-
-          if (Math.abs(diff) < 0.01) {
-            brushData.currentScale = brushData.targetScale;
-          }
-
-          brushData.container.scale.set(brushData.currentScale);
-        }
-      });
-    };
-
-    // Only add ticker if app is still valid
-    if (!appRef.current) {
-      gridContainer.destroy({ children: true });
-      return;
-    }
-
-    ticker.add(animate);
-
     return () => {
       isEffectActive = false;
       if (!appRef.current) return;
-      try {
-        ticker.remove(animate);
-      } catch {
-        // Ticker may already be destroyed
-      }
       try {
         gridContainer.destroy({ children: true });
       } catch {
         // Container may already be destroyed
       }
     };
-  }, [isReady, sortedPresets, columns, brushSize, onPresetDragStart, onPresetDragEnd]);
-
-  // Draw dashed rectangle for dragged brush border
-  const drawDashedRect = (g: Graphics, x: number, y: number, w: number, h: number, color: number) => {
-    const dashSize = 4;
-    const gapSize = 4;
-    const half = w / 2;
-    g.moveTo(-half, -half);
-    g.lineTo(half, -half);
-    g.moveTo(half, -half);
-    g.lineTo(half, half);
-    g.moveTo(half, half);
-    g.lineTo(-half, half);
-    g.moveTo(-half, half);
-    g.lineTo(-half, -half);
-    g.stroke({ width: 2, color });
-  };
+  }, [isReady, sortedPresets, columns, brushSize]);
 
   // Update borders when dragging changes
   useEffect(() => {
@@ -423,7 +390,6 @@ export function BrushGrid({
       brushData.border.rect(-brushSize / 2, -brushSize / 2, brushSize, brushSize);
       if (isDragged) {
         // Draw dashed border for dragged state
-        const g = new Graphics();
         const half = brushSize / 2;
         const dashSize = 4;
         const gapSize = 4;
@@ -473,8 +439,6 @@ export function BrushGrid({
           drawing = !drawing;
         }
         brushData.border.stroke({ width: 2, color: 0x3b82f6 });
-      } else if (hoveredSpriteRef.current === brushData) {
-        brushData.border.stroke({ width: 2, color: 0x3b82f6 });
       } else {
         brushData.border.stroke({ width: 2, color: 0x52525b });
       }
@@ -504,23 +468,8 @@ export function BrushGrid({
       ref={containerRef}
       className="overflow-auto"
       style={{ width: containerWidth, height: containerHeight }}
-      draggable={true}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onDragStart={(e) => {
-        const presetId = draggingPresetIdRef.current;
-        if (!presetId) {
-          e.preventDefault();
-          return;
-        }
-        e.dataTransfer.setData('text/plain', presetId);
-        e.dataTransfer.effectAllowed = 'copy';
-        onPresetDragStart(e, presetId);
-      }}
-      onDragEnd={() => {
-        draggingPresetIdRef.current = null;
-        onPresetDragEnd();
-      }}
     />
   );
 }
