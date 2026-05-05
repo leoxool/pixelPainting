@@ -19,6 +19,7 @@ interface BrushLibraryPanelProps {
   onImport: () => void;
   onExport: () => void;
   brushImportInputRef?: React.RefObject<HTMLInputElement | null>;
+  isCompact?: boolean;
 }
 
 export function BrushLibraryPanel({
@@ -30,9 +31,10 @@ export function BrushLibraryPanel({
   onImport,
   onExport,
   brushImportInputRef,
+  isCompact = false,
 }: BrushLibraryPanelProps) {
   return (
-    <div className="w-64 bg-zinc-800 p-3 flex flex-col h-full border-r border-zinc-700">
+    <div className={`flex flex-col h-full ${isCompact ? '' : 'w-64 bg-zinc-800 p-3 border-r border-zinc-700'}`}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium">笔刷库</h3>
         <div className="flex gap-1">

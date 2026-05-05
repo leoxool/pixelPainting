@@ -30,7 +30,7 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
   const [onlineMembers, setOnlineMembers] = useState<RoomMember[]>(members);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showStudentPanel, setShowStudentPanel] = useState(false);
-  const [studentListCollapsed, setStudentListCollapsed] = useState(true);
+  const [studentListCollapsed, setStudentListCollapsed] = useState(false);
   const supabase = createClient();
   const teacherStudioRef = useRef<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>(null);
 
@@ -146,27 +146,28 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
       {/* Top Bar */}
       <header className="flex h-14 items-center justify-between border-b border-[#27272a] bg-[#18181b] px-4">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowStudentPanel(!showStudentPanel)}
-            className="flex items-center gap-2 hover:text-[#fafafa] transition-colors"
-            title={showStudentPanel ? '隐藏学生列表' : '显示学生列表'}
-          >
-            <svg className={`h-5 w-5 transition-transform ${showStudentPanel ? 'rotate-0' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-            </svg>
-            <h1 className="text-lg font-bold text-[#fafafa]">
-              {room.name || 'Untitled Room'}
-            </h1>
-          </button>
+          <h1 className="text-lg font-bold text-[#fafafa]">
+            {room.name || 'Untitled Room'}
+          </h1>
           <span className="rounded bg-[#27272a] px-2 py-1 font-mono text-xs text-[#a1a1aa]">
             {room.join_code}
-          </span>
-          <span className="text-sm text-[#71717a]">
-            {assets.length} 作品
           </span>
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowStudentPanel(!showStudentPanel)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              showStudentPanel ? 'bg-blue-600 text-white' : 'bg-[#27272a] text-[#a1a1aa] hover:text-white'
+            }`}
+            title={showStudentPanel ? '隐藏学生列表' : '显示学生列表'}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            在线学生 ({onlineMembers.length})
+          </button>
+
           <button
             onClick={leaveRoom}
             className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46] transition-colors"

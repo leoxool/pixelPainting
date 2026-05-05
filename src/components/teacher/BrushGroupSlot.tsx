@@ -32,12 +32,12 @@ export function BrushGroupSlot({
     >
       {/* Gray reference bar */}
       <div
-        className="w-16 rounded mb-1"
-        style={{ backgroundColor: levelGray, height: '20px' }}
+        className="w-[77px] rounded mb-1"
+        style={{ backgroundColor: levelGray, height: '24px' }}
       />
       {/* Canvas thumbnail */}
       <div
-        className={`w-16 h-16 border-2 rounded transition-colors ${
+        className={`w-[77px] h-[77px] border-2 rounded transition-colors ${
           draggedBrushId
             ? 'border-dashed border-blue-400 bg-blue-900/30 hover:border-blue-300'
             : 'border-zinc-600 hover:border-blue-500'
@@ -53,7 +53,7 @@ export function BrushGroupSlot({
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-zinc-500">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </div>

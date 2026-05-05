@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { BrushPreset, BrushGroup, SortRule } from './types';
 import { BrushGroupSlot } from './BrushGroupSlot';
 import { BrushGrid } from './BrushGrid';
+import { FloatingWindow } from './FloatingWindow';
 import { getBrushGroups, saveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 
 interface BrushGroupEditorProps {
@@ -33,9 +34,10 @@ export function BrushGroupEditor({
   const [draggedBrushId, setDraggedBrushId] = useState<string | null>(null);
   const [savedGroups, setSavedGroups] = useState<BrushGroup[]>([]);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [showSlotsPanel, setShowSlotsPanel] = useState(true);
 
   // Container refs for grid sizing
-  const bottomContainerRef = useRef<HTMLDivElement>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
   const [gridWidth, setGridWidth] = useState(600);
   const [gridHeight, setGridHeight] = useState(300);
 
@@ -56,9 +58,9 @@ export function BrushGroupEditor({
   // Update grid dimensions on resize
   useEffect(() => {
     const updateDimensions = () => {
-      if (bottomContainerRef.current) {
-        setGridWidth(bottomContainerRef.current.clientWidth);
-        setGridHeight(bottomContainerRef.current.clientHeight);
+      if (gridContainerRef.current) {
+        setGridWidth(gridContainerRef.current.clientWidth);
+        setGridHeight(gridContainerRef.current.clientHeight);
       }
     };
 
@@ -122,85 +124,58 @@ export function BrushGroupEditor({
   const filledSlots = slots.filter(s => s !== null).length;
   const canSave = filledSlots === 10;
 
+  // Position floating window at bottom center by default
+  const getDefaultPosition = () => {
+    if (typeof window !== 'undefined') {
+      return {
+        x: (window.innerWidth - 800) / 2,
+        y: window.innerHeight - 220
+      };
+    }
+    return { x: 100, y: 400 };
+  };
+
+  const [windowPosition, setWindowPosition] = useState(getDefaultPosition);
+
+  // Toggle slots panel with 'g' key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key.toLowerCase() === 'g') {
+        setShowSlotsPanel(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Top: Brush Group Slots */}
-      <div className="flex-shrink-0 p-4 bg-zinc-800/50 border-b border-zinc-700">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="text-sm font-medium">笔刷组 ({filledSlots}/10)</div>
-            <button
-              onClick={() => setShowLibraryModal(true)}
-              className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300"
-            >
-              笔刷组库
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClearAll}
-              disabled={filledSlots === 0}
-              className={`px-3 py-1 rounded text-xs font-medium ${
-                filledSlots > 0
-                  ? 'bg-red-600 hover:bg-red-500 text-white'
-                  : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
-              }`}
-            >
-              清空
-            </button>
-            <button
-              onClick={handleSaveGroup}
-              disabled={!canSave}
-              className={`px-3 py-1 rounded text-xs font-medium ${
-                canSave
-                  ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                  : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
-              }`}
-            >
-              保存笔刷组
-            </button>
-          </div>
-        </div>
-        {/* 10 slots horizontally */}
-        <div className="flex justify-center gap-2">
-          {slots.map((preset, index) => (
-            <BrushGroupSlot
-              key={index}
-              slotIndex={index}
-              brushPreset={preset}
-              onSlotClick={onSlotClick}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              draggedBrushId={draggedBrushId}
-            />
-          ))}
-        </div>
+    <div className="flex flex-col h-full relative">
+      {/* Sort controls - displayed at page top */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 border-b border-zinc-700 bg-zinc-800/50">
+        <span className="text-xs text-zinc-400">排序:</span>
+        {(['time', 'brightness', 'saturation', 'hue'] as SortRule[]).map((rule) => (
+          <button
+            key={rule}
+            onClick={() => setSortRule(rule)}
+            className={`px-2 py-1 rounded text-xs ${
+              sortRule === rule
+                ? 'bg-blue-600 text-white'
+                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+            }`}
+          >
+            {rule === 'time' ? '时间' : rule === 'brightness' ? '亮度' : rule === 'saturation' ? '饱和度' : '色相'}
+          </button>
+        ))}
       </div>
 
-      {/* Bottom: Brush Grid */}
-      <div ref={bottomContainerRef} className="flex-1 overflow-hidden">
-        {/* Sort controls */}
-        <div className="flex items-center gap-2 p-2 border-b border-zinc-700">
-          <span className="text-xs text-zinc-400">排序:</span>
-          {(['time', 'brightness', 'saturation', 'hue'] as SortRule[]).map((rule) => (
-            <button
-              key={rule}
-              onClick={() => setSortRule(rule)}
-              className={`px-2 py-1 rounded text-xs ${
-                sortRule === rule
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-              }`}
-            >
-              {rule === 'time' ? '时间' : rule === 'brightness' ? '亮度' : rule === 'saturation' ? '饱和度' : '色相'}
-            </button>
-          ))}
-        </div>
+      {/* Full page Brush Grid - takes remaining space */}
+      <div ref={gridContainerRef} className="flex-1 overflow-hidden">
         <BrushGrid
           presets={brushPresets}
           sortRule={sortRule}
           containerWidth={gridWidth}
-          containerHeight={gridHeight - 40}
+          containerHeight={gridHeight}
           onPresetDragStart={handleDragStart}
           onPresetDragEnd={handleDragEnd}
           onSlotDrop={handleDrop}
@@ -208,9 +183,93 @@ export function BrushGroupEditor({
         />
       </div>
 
-      {/* Brush Group Library Modal */}
+      {/* Floating Slots Panel */}
+      <FloatingWindow
+        title="笔刷组"
+        initialPosition={windowPosition}
+        initialSize={{ width: 880, height: 180 }}
+        isOpen={showSlotsPanel}
+        onClose={() => setShowSlotsPanel(false)}
+        showTitleBar={false}
+      >
+        <div className="p-3 flex flex-col gap-3">
+          {/* Slots panel content with close button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-sm font-medium">笔刷组 ({filledSlots}/10)</div>
+              <button
+                onClick={() => setShowLibraryModal(true)}
+                className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300"
+              >
+                笔刷组库
+              </button>
+              <button
+                onClick={onClearAll}
+                disabled={filledSlots === 0}
+                className={`px-3 py-1 rounded text-xs font-medium ${
+                  filledSlots > 0
+                    ? 'bg-red-600 hover:bg-red-500 text-white'
+                    : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+                }`}
+              >
+                清空
+              </button>
+              <button
+                onClick={handleSaveGroup}
+                disabled={!canSave}
+                className={`px-3 py-1 rounded text-xs font-medium ${
+                  canSave
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                    : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+                }`}
+              >
+                保存笔刷组
+              </button>
+            </div>
+            {/* Close button */}
+            <button
+              onClick={() => setShowSlotsPanel(false)}
+              className="p-1 hover:bg-zinc-700 rounded transition-colors"
+              title="关闭"
+            >
+              <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* 10 slots horizontally */}
+          <div className="flex justify-center gap-2">
+            {slots.map((preset, index) => (
+              <BrushGroupSlot
+                key={index}
+                slotIndex={index}
+                brushPreset={preset}
+                onSlotClick={onSlotClick}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                draggedBrushId={draggedBrushId}
+              />
+            ))}
+          </div>
+        </div>
+      </FloatingWindow>
+
+      {/* Toggle Slots Panel Button - bottom right corner */}
+      <button
+        onClick={() => setShowSlotsPanel(!showSlotsPanel)}
+        className={`absolute bottom-4 right-4 p-2 rounded-lg transition-colors z-10 ${
+          showSlotsPanel ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+        }`}
+        title={showSlotsPanel ? '隐藏笔刷组面板 (G)' : '显示笔刷组面板 (G)'}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+      </button>
+
+      {/* Brush Group Library Modal - above floating window */}
       {showLibraryModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
+        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
           <div className="bg-zinc-800 rounded-2xl w-[400px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
               <h3 className="font-semibold text-sm">笔刷组库</h3>

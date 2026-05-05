@@ -13,10 +13,13 @@ import { DataSourcePanel } from './RenderOutput/DataSourcePanel';
 import { RenderOutputPanel } from './RenderOutput';
 import { getLevelGray, extractGridData, renderArt } from './gridUtils';
 import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset, getBrushGroups as dbGetBrushGroups, saveBrushGroups as dbSaveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
+import { FloatingWindow } from './FloatingWindow';
+import { ShortcutSidebar } from './ShortcutSidebar';
 import JSZip from 'jszip';
 
 type DataSource = 'webcam' | 'image';
 type BrushMode = 'draw' | 'erase';
+type Stage = 'single' | 'group' | 'render';
 
 interface BrushLayer {
   canvas: HTMLCanvasElement;
@@ -153,6 +156,15 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const [brushGroupSlots, setBrushGroupSlots] = useState<(BrushPreset | null)[]>(Array(10).fill(null));
   // 用于触发笔刷组列表更新
   const [brushGroupUpdateTrigger, setBrushGroupUpdateTrigger] = useState(0);
+
+  // Stage-based navigation (replaces tab + brushEditMode)
+  const [currentStage, setCurrentStage] = useState<Stage>('single');
+
+  // Floating window visibility states
+  const [showBrushLibraryPanel, setShowBrushLibraryPanel] = useState(true);
+  const [showBrushGroupSlots, setShowBrushGroupSlots] = useState(true);
+  const [showDataSourcePanel, setShowDataSourcePanel] = useState(true);
+  const [isBrushLibraryCollapsed, setIsBrushLibraryCollapsed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1355,8 +1367,47 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     return () => { stopRenderLoop(); };
   }, [stopRenderLoop]);
 
+  // Keyboard shortcuts: 1/2/3 to switch stages, F for fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case '1':
+          setCurrentStage('single');
+          break;
+        case '2':
+          setCurrentStage('group');
+          break;
+        case '3':
+          setCurrentStage('render');
+          break;
+        case 'f':
+          setIsFullscreen(prev => !prev);
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Toggle floating panel based on stage
+  useEffect(() => {
+    if (currentStage === 'single') {
+      // Single brush: show library panel by default
+      setShowBrushLibraryPanel(true);
+    } else if (currentStage === 'group') {
+      // Group brush: show slots panel by default
+      setShowBrushGroupSlots(true);
+    } else if (currentStage === 'render') {
+      // Render: show data source by default
+      setShowDataSourcePanel(true);
+    }
+  }, [currentStage]);
+
   return (
-    <div className="flex h-full flex-col bg-[#09090b] text-[#fafafa]">
+    <div className="flex h-full bg-[#09090b] text-[#fafafa]">
       {/* Hidden brush import file input */}
       <input
         ref={brushImportInputRef}
@@ -1366,368 +1417,295 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         onChange={handleBrushImport}
         className="hidden"
       />
-      {/* Tab Navigation */}
-      <div className="flex border-b border-[#27272a] bg-[#18181b]">
-        <button
-          onClick={() => { setActiveTab('brushEdit'); setBrushUpdateTrigger(t => t + 1); }}
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeTab === 'brushEdit'
-              ? 'text-white border-b-2 border-blue-500'
-              : 'text-zinc-500 hover:text-zinc-300'
-          }`}
-        >
-          笔刷编辑
-        </button>
-        <button
-          onClick={() => { setActiveTab('renderOutput'); setSourceUpdateTrigger(t => t + 1); }}
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeTab === 'renderOutput'
-              ? 'text-white border-b-2 border-blue-500'
-              : 'text-zinc-500 hover:text-zinc-300'
-          }`}
-        >
-          渲染输出
-        </button>
-        {/* Mode Switcher - shown only in brushEdit tab */}
-        {activeTab === 'brushEdit' && (
-          <div className="flex items-center ml-auto mr-4">
-            <div className="flex bg-zinc-800 rounded-lg p-1">
+
+      {/* Left: Shortcut Sidebar */}
+      <ShortcutSidebar
+        currentStage={currentStage}
+        onStageChange={setCurrentStage}
+        onFullscreen={() => setIsFullscreen(prev => !prev)}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Stage 1: Single Brush Edit */}
+        {currentStage === 'single' && (
+          <div className="flex flex-1 overflow-hidden">
+            {/* Center: Single Brush Editor Canvas */}
+            <div className="flex-1 flex flex-col p-6">
+              {/* Tab Toggle - 拍摄/涂鸦 buttons */}
+              <div className="flex border-b border-zinc-600 mb-4 w-fit">
+                <button
+                  onClick={() => {
+                    if (cameraStatus === 'idle') {
+                      startCameraCapture();
+                    }
+                  }}
+                  className={`px-4 py-2 text-xs font-medium transition-colors ${
+                    cameraStatus !== 'idle'
+                      ? 'text-white border-b-2 border-blue-500'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  拍摄
+                </button>
+                <button
+                  onClick={() => {
+                    if (cameraStatus !== 'idle') cancelCameraCapture();
+                  }}
+                  className={`px-4 py-2 text-xs font-medium transition-colors ${
+                    cameraStatus === 'idle'
+                      ? 'text-white border-b-2 border-blue-500'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  涂鸦
+                </button>
+              </div>
+
+              {/* Canvas area */}
+              <div className="flex items-center gap-5">
+                {cameraStatus === 'idle' && (
+                  <Toolbar
+                    brushMode={brushMode}
+                    brushSize={brushSize}
+                    brushOpacity={brushOpacity}
+                    brushColor={brushColor}
+                    onBrushModeChange={setBrushMode}
+                    onBrushSizeChange={setBrushSize}
+                    onBrushOpacityChange={setBrushOpacity}
+                    onBrushColorChange={setBrushColor}
+                    colorInputRef={colorInputRef}
+                  />
+                )}
+
+                <BrushCanvas
+                  cameraStatus={cameraStatus}
+                  singleBrushEditorRef={singleBrushEditorRef}
+                  cameraVideoRef={cameraVideoRef}
+                  cameraPreviewRef={cameraPreviewRef}
+                  adjustmentPreviewRef={adjustmentPreviewRef}
+                  editingOriginalImageRef={editingOriginalImageRef}
+                  removeWhiteBg={removeWhiteBg}
+                  bgRemoveStrength={bgRemoveStrength}
+                  imageBrightness={imageBrightness}
+                  imageContrast={imageContrast}
+                  imageSaturation={imageSaturation}
+                  onRemoveWhiteBgChange={setRemoveWhiteBg}
+                  onBgRemoveStrengthChange={setBgRemoveStrength}
+                  onBrightnessChange={setImageBrightness}
+                  onContrastChange={setImageContrast}
+                  onSaturationChange={setImageSaturation}
+                  onApplyAdjustments={applyImageAdjustments}
+                  onConfirmPhoto={confirmPhoto}
+                  onStartCameraCapture={startCameraCapture}
+                  onCancelCameraCapture={cancelCameraCapture}
+                  onTakePhoto={takePhoto}
+                  onSaveToBrushLibrary={() => {
+                    const canvas = adjustmentPreviewRef.current;
+                    if (canvas) {
+                      const tempCanvas = document.createElement('canvas');
+                      tempCanvas.width = BRUSH_SIZE;
+                      tempCanvas.height = BRUSH_SIZE;
+                      const tempCtx = tempCanvas.getContext('2d');
+                      if (tempCtx) {
+                        tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+                        const dataUrl = tempCanvas.toDataURL('image/png');
+                        const newPreset: BrushPreset = {
+                          id: Date.now().toString(),
+                          name: `笔刷 ${Date.now()}`,
+                          timestamp: Date.now(),
+                          layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+                        };
+                        const updated = [...brushPresets, newPreset];
+                        saveBrushPresets(updated);
+                        alert('已保存到笔刷库！');
+                      }
+                    }
+                  }}
+                  onSaveToLibrary={() => {
+                    const canvas = singleBrushEditorRef.current;
+                    if (canvas) {
+                      const tempCanvas = document.createElement('canvas');
+                      tempCanvas.width = BRUSH_SIZE;
+                      tempCanvas.height = BRUSH_SIZE;
+                      const tempCtx = tempCanvas.getContext('2d');
+                      if (tempCtx) {
+                        tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+                        const dataUrl = tempCanvas.toDataURL('image/png');
+                        const newPreset: BrushPreset = {
+                          id: Date.now().toString(),
+                          name: `笔刷 ${Date.now()}`,
+                          timestamp: Date.now(),
+                          layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+                        };
+                        const updated = [...brushPresets, newPreset];
+                        saveBrushPresets(updated);
+                        alert('已保存到笔刷库！');
+                      }
+                    }
+                  }}
+                  onClearCanvas={() => {
+                    const canvas = singleBrushEditorRef.current;
+                    if (canvas) {
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) ctx.clearRect(0, 0, 400, 400);
+                    }
+                  }}
+                  onCancelEdit={() => {
+                    if (cameraStatus === 'idle') {
+                      startCameraCapture();
+                    }
+                  }}
+                  handleEditingMouseDown={handleEditingMouseDown}
+                  handleEditingMouseMove={handleEditingMouseMove}
+                  handleEditingMouseUp={handleEditingMouseUp}
+                />
+              </div>
+            </div>
+
+            {/* Right: Brush Library Panel */}
+            <div className={`flex-shrink-0 border-l border-zinc-700 bg-zinc-800 flex flex-col transition-all duration-300 ${isBrushLibraryCollapsed ? 'w-12' : 'w-64'}`}>
+              {/* Collapse toggle */}
               <button
-                onClick={() => setBrushEditMode('single')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  brushEditMode === 'single'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
+                onClick={() => setIsBrushLibraryCollapsed(prev => !prev)}
+                className="p-2 hover:bg-zinc-700 flex items-center justify-center"
+                title={isBrushLibraryCollapsed ? '展开笔刷库' : '收起笔刷库'}
               >
-                单个笔刷
+                <svg className={`w-5 h-5 text-zinc-400 transition-transform ${isBrushLibraryCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </button>
-              <button
-                onClick={() => setBrushEditMode('group')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  brushEditMode === 'group'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                笔刷组
-              </button>
+
+              {/* Panel header and content - hidden when collapsed */}
+              {!isBrushLibraryCollapsed && (
+                <BrushLibraryPanel
+                  brushPresets={brushPresets}
+                  hoveredPresetId={hoveredPresetId}
+                  onHoverPreset={setHoveredPresetId}
+                  onSelectPreset={(preset) => {
+                    const firstLayer = preset.layers[0];
+                    if (firstLayer) {
+                      const img = new Image();
+                      img.onload = () => {
+                        const canvas = singleBrushEditorRef.current;
+                        if (canvas) {
+                          const ctx = canvas.getContext('2d');
+                          if (ctx) {
+                            ctx.clearRect(0, 0, 400, 400);
+                            ctx.drawImage(img, 0, 0, 400, 400);
+                          }
+                        }
+                      };
+                      img.src = firstLayer;
+                    }
+                  }}
+                  onDeletePreset={deletePreset}
+                  onImport={() => brushImportInputRef.current?.click()}
+                  onExport={async () => {
+                    const zip = new JSZip();
+                    brushPresets.forEach((preset, index) => {
+                      const layer = preset.layers[0];
+                      if (layer) {
+                        const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                          bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        zip.file(`brush_${index + 1}.png`, bytes);
+                      }
+                    });
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `brushes-${Date.now()}.zip`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  brushImportInputRef={brushImportInputRef}
+                />
+              )}
             </div>
           </div>
         )}
+
+        {/* Stage 2: Brush Group Edit */}
+        {currentStage === 'group' && (
+          <div className="flex-1 relative">
+            <BrushGroupEditor
+              brushPresets={brushPresets}
+              slots={brushGroupSlots}
+              onSlotChange={handleBrushGroupSlotChange}
+              onSlotClick={openBrushEditor}
+              onSaveGroup={handleSaveBrushGroup}
+              onClearAll={() => setBrushGroupSlots(Array(10).fill(null))}
+              brushUpdateTrigger={brushUpdateTrigger}
+              onLoadGroup={handleLoadBrushGroup}
+              brushGroupUpdateTrigger={brushGroupUpdateTrigger}
+            />
+          </div>
+        )}
+
+        {/* Stage 3: Render Output */}
+        {currentStage === 'render' && (
+          <div className="flex flex-1 overflow-hidden">
+            <DataSourcePanel
+              dataSource={dataSource}
+              isWebcamActive={isWebcamActive}
+              sourceAspectRatio={sourceAspectRatio}
+              onDataSourceChange={setDataSource}
+              onStartWebcam={startWebcam}
+              onStopWebcam={stopWebcam}
+              onImageUpload={handleImageUpload}
+              onOpenBrushLibrary={() => {
+                dbGetBrushGroups().then(groups => {
+                  setBrushGroupsForLoad(groups);
+                  setShowBrushGroupLoadModal(true);
+                });
+              }}
+              imageInputRef={imageInputRef}
+              videoRef={videoRef}
+            />
+
+            <RenderOutputPanel
+              isWebcamActive={isWebcamActive}
+              sourceAspectRatio={sourceAspectRatio}
+              isFullscreen={isFullscreen}
+              setIsFullscreen={setIsFullscreen}
+              transform={transform}
+              setTransform={setTransform}
+              resetTransform={resetTransform}
+              isPanning={isPanning}
+              sourceResolution={sourceResolution}
+              gridSizeX={gridSizeX}
+              gridSizeY={gridSizeY}
+              brushLayers={brushLayersRef.current}
+              sourceCanvas={sourceCanvasRef.current}
+              sizeJitter={sizeJitter}
+              rotationJitter={rotationJitter}
+              enableFlip={enableFlip}
+              enableMergeOptimization={enableMergeOptimization}
+              canvasBackgroundColor={canvasBackgroundColor}
+              gridSamplingSize={gridSamplingSize}
+              setGridSamplingSize={setGridSamplingSize}
+              setSizeJitter={setSizeJitter}
+              setRotationJitter={setRotationJitter}
+              setEnableFlip={setEnableFlip}
+              setEnableMergeOptimization={setEnableMergeOptimization}
+              setCanvasBackgroundColor={setCanvasBackgroundColor}
+              renderTrigger={renderTrigger}
+              outputCanvasRef={outputCanvasRef}
+              showSettingsPanel={showSettingsPanel}
+              setShowSettingsPanel={setShowSettingsPanel}
+              handleMouseDown={handleMouseDown}
+              handleMouseMove={handleMouseMove}
+              handleMouseUp={handleMouseUp}
+              renderArt={handleRenderArt}
+            />
+          </div>
+        )}
       </div>
-
-      {/* Tab Content */}
-      {activeTab === 'brushEdit' ? (
-        /* Brush Edit Tab */
-        <div className="flex flex-1 overflow-hidden">
-          {brushEditMode === 'single' ? (
-            /* Single Brush Edit Mode - library on left, editor on right */
-            <>
-              {/* Left: Single Brush Library */}
-              <BrushLibraryPanel
-                brushPresets={brushPresets}
-                hoveredPresetId={hoveredPresetId}
-                onHoverPreset={setHoveredPresetId}
-                onSelectPreset={(preset) => {
-                  const firstLayer = preset.layers[0];
-                  if (firstLayer) {
-                    const img = new Image();
-                    img.onload = () => {
-                      const canvas = singleBrushEditorRef.current;
-                      if (canvas) {
-                        const ctx = canvas.getContext('2d');
-                        if (ctx) {
-                          ctx.clearRect(0, 0, 400, 400);
-                          ctx.drawImage(img, 0, 0, 400, 400);
-                        }
-                      }
-                    };
-                    img.src = firstLayer;
-                  }
-                }}
-                onDeletePreset={deletePreset}
-                onImport={() => brushImportInputRef.current?.click()}
-                onExport={async () => {
-                  const zip = new JSZip();
-                  brushPresets.forEach((preset, index) => {
-                    const layer = preset.layers[0];
-                    if (layer) {
-                      const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
-                      const binaryString = atob(base64Data);
-                      const bytes = new Uint8Array(binaryString.length);
-                      for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                      }
-                      zip.file(`brush_${index + 1}.png`, bytes);
-                    }
-                  });
-                  const blob = await zip.generateAsync({ type: 'blob' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `brushes-${Date.now()}.zip`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                brushImportInputRef={brushImportInputRef}
-              />
-
-              {/* Right: Single Brush Editor */}
-              <div className="flex-1 flex flex-col p-6">
-                {/* Tab Toggle - 拍摄/涂鸦 buttons - upper left */}
-                <div className="flex border-b border-zinc-600 mb-4 w-fit">
-                  <button
-                    onClick={() => {
-                      if (cameraStatus === 'idle') {
-                        startCameraCapture();
-                      }
-                    }}
-                    className={`px-4 py-2 text-xs font-medium transition-colors ${
-                      cameraStatus !== 'idle'
-                        ? 'text-white border-b-2 border-blue-500'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    拍摄
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (cameraStatus !== 'idle') cancelCameraCapture();
-                    }}
-                    className={`px-4 py-2 text-xs font-medium transition-colors ${
-                      cameraStatus === 'idle'
-                        ? 'text-white border-b-2 border-blue-500'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    涂鸦
-                  </button>
-                </div>
-
-                {/* Canvas area - switches between doodle canvas and camera preview */}
-                <div className="flex items-center gap-5">
-                  {/* Left Toolbar - Photoshop style, 10px from tab left edge */}
-                  {cameraStatus === 'idle' && (
-                    <Toolbar
-                      brushMode={brushMode}
-                      brushSize={brushSize}
-                      brushOpacity={brushOpacity}
-                      brushColor={brushColor}
-                      onBrushModeChange={setBrushMode}
-                      onBrushSizeChange={setBrushSize}
-                      onBrushOpacityChange={setBrushOpacity}
-                      onBrushColorChange={setBrushColor}
-                      colorInputRef={colorInputRef}
-                    />
-                  )}
-
-                  <BrushCanvas
-                    cameraStatus={cameraStatus}
-                    singleBrushEditorRef={singleBrushEditorRef}
-                    cameraVideoRef={cameraVideoRef}
-                    cameraPreviewRef={cameraPreviewRef}
-                    adjustmentPreviewRef={adjustmentPreviewRef}
-                    editingOriginalImageRef={editingOriginalImageRef}
-                    removeWhiteBg={removeWhiteBg}
-                    bgRemoveStrength={bgRemoveStrength}
-                    imageBrightness={imageBrightness}
-                    imageContrast={imageContrast}
-                    imageSaturation={imageSaturation}
-                    onRemoveWhiteBgChange={setRemoveWhiteBg}
-                    onBgRemoveStrengthChange={setBgRemoveStrength}
-                    onBrightnessChange={setImageBrightness}
-                    onContrastChange={setImageContrast}
-                    onSaturationChange={setImageSaturation}
-                    onApplyAdjustments={applyImageAdjustments}
-                    onConfirmPhoto={confirmPhoto}
-                    onStartCameraCapture={startCameraCapture}
-                    onCancelCameraCapture={cancelCameraCapture}
-                    onTakePhoto={takePhoto}
-                    onSaveToBrushLibrary={() => {
-                      const canvas = adjustmentPreviewRef.current;
-                      if (canvas) {
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = BRUSH_SIZE;
-                        tempCanvas.height = BRUSH_SIZE;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        if (tempCtx) {
-                          tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-                          const dataUrl = tempCanvas.toDataURL('image/png');
-                          const newPreset: BrushPreset = {
-                            id: Date.now().toString(),
-                            name: `笔刷 ${Date.now()}`,
-                            timestamp: Date.now(),
-                            layers: [dataUrl, null, null, null, null, null, null, null, null, null],
-                          };
-                          const updated = [...brushPresets, newPreset];
-                          saveBrushPresets(updated);
-                          alert('已保存到笔刷库！');
-                        }
-                      }
-                    }}
-                    onSaveToLibrary={() => {
-                      const canvas = singleBrushEditorRef.current;
-                      if (canvas) {
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = BRUSH_SIZE;
-                        tempCanvas.height = BRUSH_SIZE;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        if (tempCtx) {
-                          tempCtx.drawImage(canvas, 0, 0, 400, 400, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-                          const dataUrl = tempCanvas.toDataURL('image/png');
-                          const newPreset: BrushPreset = {
-                            id: Date.now().toString(),
-                            name: `笔刷 ${Date.now()}`,
-                            timestamp: Date.now(),
-                            layers: [dataUrl, null, null, null, null, null, null, null, null, null],
-                          };
-                          const updated = [...brushPresets, newPreset];
-                          saveBrushPresets(updated);
-                          alert('已保存到笔刷库！');
-                        }
-                      }
-                    }}
-                    onClearCanvas={() => {
-                      const canvas = singleBrushEditorRef.current;
-                      if (canvas) {
-                        const ctx = canvas.getContext('2d');
-                        if (ctx) ctx.clearRect(0, 0, 400, 400);
-                      }
-                    }}
-                    onCancelEdit={() => {
-                      if (cameraStatus === 'idle') {
-                        startCameraCapture();
-                      }
-                    }}
-                    handleEditingMouseDown={handleEditingMouseDown}
-                    handleEditingMouseMove={handleEditingMouseMove}
-                    handleEditingMouseUp={handleEditingMouseUp}
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            /* Group Brush Edit Mode - New BrushGroupEditor */
-            <div className="flex-1">
-              <BrushGroupEditor
-                brushPresets={brushPresets}
-                slots={brushGroupSlots}
-                onSlotChange={handleBrushGroupSlotChange}
-                onSlotClick={openBrushEditor}
-                onSaveGroup={handleSaveBrushGroup}
-                onClearAll={() => setBrushGroupSlots(Array(10).fill(null))}
-                brushUpdateTrigger={brushUpdateTrigger}
-                onLoadGroup={handleLoadBrushGroup}
-                brushGroupUpdateTrigger={brushGroupUpdateTrigger}
-              />
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Render Output Tab */
-        <div className="flex flex-1 overflow-hidden">
-          <DataSourcePanel
-            dataSource={dataSource}
-            isWebcamActive={isWebcamActive}
-            sourceAspectRatio={sourceAspectRatio}
-            onDataSourceChange={setDataSource}
-            onStartWebcam={startWebcam}
-            onStopWebcam={stopWebcam}
-            onImageUpload={handleImageUpload}
-            onOpenBrushLibrary={() => {
-              // Load brush groups from IndexedDB and show the load modal
-              dbGetBrushGroups().then(groups => {
-                setBrushGroupsForLoad(groups);
-                setShowBrushGroupLoadModal(true);
-              });
-            }}
-            imageInputRef={imageInputRef}
-            videoRef={videoRef}
-          />
-
-          <RenderOutputPanel
-            isWebcamActive={isWebcamActive}
-            sourceAspectRatio={sourceAspectRatio}
-            isFullscreen={isFullscreen}
-            setIsFullscreen={setIsFullscreen}
-            transform={transform}
-            setTransform={setTransform}
-            resetTransform={resetTransform}
-            isPanning={isPanning}
-            sourceResolution={sourceResolution}
-            gridSizeX={gridSizeX}
-            gridSizeY={gridSizeY}
-            brushLayers={brushLayersRef.current}
-            sourceCanvas={sourceCanvasRef.current}
-            sizeJitter={sizeJitter}
-            rotationJitter={rotationJitter}
-            enableFlip={enableFlip}
-            enableMergeOptimization={enableMergeOptimization}
-            canvasBackgroundColor={canvasBackgroundColor}
-            gridSamplingSize={gridSamplingSize}
-            setGridSamplingSize={setGridSamplingSize}
-            setSizeJitter={setSizeJitter}
-            setRotationJitter={setRotationJitter}
-            setEnableFlip={setEnableFlip}
-            setEnableMergeOptimization={setEnableMergeOptimization}
-            setCanvasBackgroundColor={setCanvasBackgroundColor}
-            renderTrigger={renderTrigger}
-            outputCanvasRef={outputCanvasRef}
-            showSettingsPanel={showSettingsPanel}
-            setShowSettingsPanel={setShowSettingsPanel}
-            handleMouseDown={handleMouseDown}
-            handleMouseMove={handleMouseMove}
-            handleMouseUp={handleMouseUp}
-            renderArt={handleRenderArt}
-          />
-        </div>
-      )}
-
-      {/* Brush Edit Modal */}
-      {editingBrushIndex !== null && (
-        <BrushEditorModal
-          editingBrushIndex={editingBrushIndex}
-          editingBrushCanvasRef={editingBrushCanvasRef}
-          editingLayerIndexRef={editingLayerIndexRef}
-          editingOriginalImageRef={editingOriginalImageRef}
-          editingSnapshotRef={editingSnapshotRef}
-          cameraStream={cameraStream}
-          cameraVideoRef={cameraVideoRef}
-          cameraPreviewRef={cameraPreviewRef}
-          adjustmentPreviewRef={adjustmentPreviewRef}
-          cameraStatus={cameraStatus}
-          brushMode={brushMode}
-          brushSize={brushSize}
-          brushOpacity={brushOpacity}
-          brushColor={brushColor}
-          removeWhiteBg={removeWhiteBg}
-          bgRemoveStrength={bgRemoveStrength}
-          imageBrightness={imageBrightness}
-          imageContrast={imageContrast}
-          imageSaturation={imageSaturation}
-          colorInputRef={colorInputRef}
-          brushLayersRef={brushLayersRef}
-          onBrushModeChange={setBrushMode}
-          onBrushSizeChange={setBrushSize}
-          onBrushOpacityChange={setBrushOpacity}
-          onBrushColorChange={setBrushColor}
-          onRemoveWhiteBgChange={(v) => { setRemoveWhiteBg(v); applyImageAdjustments(); }}
-          onBgRemoveStrengthChange={(v) => { setBgRemoveStrength(v); applyImageAdjustments(); }}
-          onBrightnessChange={(v) => { setImageBrightness(v); applyImageAdjustments(); }}
-          onContrastChange={(v) => { setImageContrast(v); applyImageAdjustments(); }}
-          onSaturationChange={(v) => { setImageSaturation(v); applyImageAdjustments(); }}
-          onStartCameraCapture={startCameraCapture}
-          onCancelCameraCapture={cancelCameraCapture}
-          onTakePhoto={takePhoto}
-          onConfirmPhoto={confirmPhoto}
-          onClose={closeBrushEditor}
-          onSave={saveBrushEditor}
-          handleEditingMouseDown={handleEditingMouseDown}
-          handleEditingMouseMove={handleEditingMouseMove}
-          handleEditingMouseUp={handleEditingMouseUp}
-        />
-      )}
 
       {/* Brush Library Modal */}
       {showBrushLibrary && (
