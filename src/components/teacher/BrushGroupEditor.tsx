@@ -74,35 +74,31 @@ export function BrushGroupEditor({
     e.dataTransfer.setData('text/plain', presetId);
     e.dataTransfer.effectAllowed = 'copy';
 
-    // Create 40x40 drag image synchronously
+    // Create 40x40 drag image
     const preset = brushPresets.find(p => p.id === presetId);
     if (preset?.layers[0]) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 40;
-      canvas.height = 40;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Draw light gray/white checkerboard pattern
-        const size = 10;
-        for (let x = 0; x < 40; x += size) {
-          for (let y = 0; y < 40; y += size) {
-            ctx.fillStyle = ((x + y) / size) % 2 === 0 ? '#e0e0e0' : '#ffffff';
-            ctx.fillRect(x, y, size, size);
+      const img = new Image();
+      img.src = preset.layers[0];
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 40;
+        canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Draw checkerboard pattern for transparency
+          const size = 10;
+          for (let x = 0; x < 40; x += size) {
+            for (let y = 0; y < 40; y += size) {
+              ctx.fillStyle = ((x + y) / size) % 2 === 0 ? '#404040' : '#808080';
+              ctx.fillRect(x, y, size, size);
+            }
           }
-        }
-        // Draw the brush image
-        const img = new Image();
-        img.src = preset.layers[0];
-        if (img.complete) {
           ctx.drawImage(img, 0, 0, 40, 40);
-          e.dataTransfer.setDragImage(canvas, 20, 20);
-        } else {
-          img.onload = () => {
-            ctx.drawImage(img, 0, 0, 40, 40);
-            e.dataTransfer.setDragImage(canvas, 20, 20);
-          };
+          const dragImg = new Image();
+          dragImg.src = canvas.toDataURL();
+          e.dataTransfer.setDragImage(dragImg, 20, 20);
         }
-      }
+      };
     }
   }, [brushPresets]);
 
@@ -300,7 +296,7 @@ export function BrushGroupEditor({
 
       {/* Brush Group Library Modal - above floating window */}
       {showLibraryModal && (
-        <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
+        <div className="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
           <div className="bg-zinc-800 rounded-2xl w-[400px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
               <h3 className="font-semibold text-sm">笔刷组库</h3>
