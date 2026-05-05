@@ -74,31 +74,37 @@ export function BrushGroupEditor({
     e.dataTransfer.setData('text/plain', presetId);
     e.dataTransfer.effectAllowed = 'copy';
 
-    // Create 40x40 drag image
+    // Create 40x40 drag image element
     const preset = brushPresets.find(p => p.id === presetId);
     if (preset?.layers[0]) {
-      const img = new Image();
+      const dragEl = document.createElement('div');
+      dragEl.style.cssText = `
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+        width: 40px;
+        height: 40px;
+        background-image: linear-gradient(45deg, #d4d4d4 25%, transparent 25%),
+          linear-gradient(-45deg, #d4d4d4 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #d4d4d4 75%),
+          linear-gradient(-45deg, transparent 75%, #d4d4d4 75%);
+        background-size: 8px 8px;
+        background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      `;
+      const img = document.createElement('img');
       img.src = preset.layers[0];
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 40;
-        canvas.height = 40;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Draw checkerboard pattern for transparency
-          const size = 10;
-          for (let x = 0; x < 40; x += size) {
-            for (let y = 0; y < 40; y += size) {
-              ctx.fillStyle = ((x + y) / size) % 2 === 0 ? '#404040' : '#808080';
-              ctx.fillRect(x, y, size, size);
-            }
-          }
-          ctx.drawImage(img, 0, 0, 40, 40);
-          const dragImg = new Image();
-          dragImg.src = canvas.toDataURL();
-          e.dataTransfer.setDragImage(dragImg, 20, 20);
-        }
-      };
+      img.style.cssText = 'width:40px;height:40px;object-fit:contain;';
+      dragEl.appendChild(img);
+      document.body.appendChild(dragEl);
+      e.dataTransfer.setDragImage(dragEl, 20, 20);
+      // Clean up after drag starts
+      requestAnimationFrame(() => document.body.removeChild(dragEl));
     }
   }, [brushPresets]);
 
