@@ -55,8 +55,21 @@ function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
+        const a = data[i + 3];
 
-        const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let brightness: number;
+        if (a === 0) {
+          // 全透明背景视为白色
+          brightness = 255;
+        } else {
+          // 半透明像素：与白色背景混合后计算亮度
+          // alpha 越低，混合后越接近白色，亮度越高
+          const alpha = a / 255;
+          const blendedR = r * alpha + 255 * (1 - alpha);
+          const blendedG = g * alpha + 255 * (1 - alpha);
+          const blendedB = b * alpha + 255 * (1 - alpha);
+          brightness = 0.2126 * blendedR + 0.7152 * blendedG + 0.0722 * blendedB;
+        }
         totalBrightness += brightness;
 
         const max = Math.max(r, g, b);
@@ -65,18 +78,30 @@ function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
 
         let saturation = 0;
         let hue = 0;
-        if (delta > 0) {
-          saturation = delta / max;
-          if (max === r) {
-            hue = ((g - b) / delta) % 6;
-          } else if (max === g) {
-            hue = (b - r) / delta + 2;
-          } else {
-            hue = (r - g) / delta + 4;
+        if (a > 0) {
+          // 有 alpha 的像素：与白色混合后计算饱和度和色相
+          const alpha = a / 255;
+          const blendedR = r * alpha + 255 * (1 - alpha);
+          const blendedG = g * alpha + 255 * (1 - alpha);
+          const blendedB = b * alpha + 255 * (1 - alpha);
+          const blendedMax = Math.max(blendedR, blendedG, blendedB);
+          const blendedMin = Math.min(blendedR, blendedG, blendedB);
+          const blendedDelta = blendedMax - blendedMin;
+
+          if (blendedDelta > 0) {
+            saturation = blendedDelta / blendedMax;
+            if (blendedMax === blendedR) {
+              hue = ((blendedG - blendedB) / blendedDelta) % 6;
+            } else if (blendedMax === blendedG) {
+              hue = (blendedB - blendedR) / blendedDelta + 2;
+            } else {
+              hue = (blendedR - blendedG) / blendedDelta + 4;
+            }
+            hue *= 60;
+            if (hue < 0) hue += 360;
           }
-          hue *= 60;
-          if (hue < 0) hue += 360;
         }
+        // 全透明像素饱和度和色相为 0（视为白色）
 
         totalSaturation += saturation;
         totalHue += hue;
