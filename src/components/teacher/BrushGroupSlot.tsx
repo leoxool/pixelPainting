@@ -37,22 +37,38 @@ export function BrushGroupSlot({
       />
       {/* Canvas thumbnail */}
       <div
-        className={`w-[77px] h-[77px] border-2 rounded transition-colors ${
+        className={`relative w-[77px] h-[77px] border-2 rounded transition-colors overflow-hidden ${
           draggedBrushId
             ? 'border-dashed border-blue-400 bg-blue-900/30 hover:border-blue-300'
             : 'border-zinc-600 hover:border-blue-500'
         }`}
-        style={{ backgroundColor: 'transparent' }}
       >
         {layerData ? (
-          <img
-            src={layerData}
-            alt={`Slot ${slotIndex}`}
-            className="w-full h-full object-contain"
-            draggable={false}
-          />
+          <>
+            {/* Checkerboard pattern for transparency */}
+            <div
+              className="absolute inset-0 rounded"
+              style={{
+                backgroundImage: `
+                  linear-gradient(45deg, #404040 25%, transparent 25%),
+                  linear-gradient(-45deg, #404040 25%, transparent 25%),
+                  linear-gradient(45deg, transparent 75%, #404040 75%),
+                  linear-gradient(-45deg, transparent 75%, #404040 75%)
+                `,
+                backgroundSize: '8px 8px',
+                backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                backgroundColor: '#606060',
+              }}
+            />
+            <img
+              src={layerData}
+              alt={`Slot ${slotIndex}`}
+              className="relative w-full h-full object-contain"
+              draggable={false}
+            />
+          </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-zinc-500">
+          <div className="relative w-full h-full flex items-center justify-center text-zinc-500">
             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>

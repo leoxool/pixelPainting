@@ -73,7 +73,34 @@ export function BrushGroupEditor({
     setDraggedBrushId(presetId);
     e.dataTransfer.setData('text/plain', presetId);
     e.dataTransfer.effectAllowed = 'copy';
-  }, []);
+
+    // Create 40x40 drag image
+    const preset = brushPresets.find(p => p.id === presetId);
+    if (preset?.layers[0]) {
+      const img = new Image();
+      img.src = preset.layers[0];
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 40;
+        canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Draw checkerboard pattern for transparency
+          const size = 10;
+          for (let x = 0; x < 40; x += size) {
+            for (let y = 0; y < 40; y += size) {
+              ctx.fillStyle = ((x + y) / size) % 2 === 0 ? '#404040' : '#808080';
+              ctx.fillRect(x, y, size, size);
+            }
+          }
+          ctx.drawImage(img, 0, 0, 40, 40);
+          const dragImg = new Image();
+          dragImg.src = canvas.toDataURL();
+          e.dataTransfer.setDragImage(dragImg, 20, 20);
+        }
+      };
+    }
+  }, [brushPresets]);
 
   const handleDragEnd = useCallback(() => {
     setDraggedBrushId(null);
@@ -269,7 +296,7 @@ export function BrushGroupEditor({
 
       {/* Brush Group Library Modal - above floating window */}
       {showLibraryModal && (
-        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
           <div className="bg-zinc-800 rounded-2xl w-[400px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
               <h3 className="font-semibold text-sm">笔刷组库</h3>

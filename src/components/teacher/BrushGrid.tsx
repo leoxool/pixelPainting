@@ -243,11 +243,28 @@ export function BrushGrid({
             onDragStart={(e) => handleDragStart(e, preset.id)}
             onDragEnd={onPresetDragEnd}
           >
+            {/* Checkerboard pattern for transparency */}
+            {preset.layers[0] && (
+              <div
+                className="absolute inset-0 rounded"
+                style={{
+                  backgroundImage: `
+                    linear-gradient(45deg, #404040 25%, transparent 25%),
+                    linear-gradient(-45deg, #404040 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #404040 75%),
+                    linear-gradient(-45deg, transparent 75%, #404040 75%)
+                  `,
+                  backgroundSize: '8px 8px',
+                  backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                  backgroundColor: '#606060',
+                }}
+              />
+            )}
             {preset.layers[0] ? (
               <img
                 src={preset.layers[0]}
                 alt={preset.name}
-                className="w-full h-full object-contain"
+                className="relative w-full h-full object-contain"
                 draggable={false}
               />
             ) : (
