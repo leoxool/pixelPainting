@@ -302,7 +302,7 @@ export function BrushGroupEditor({
 
       {/* Brush Group Library Modal - above floating window */}
       {showLibraryModal && (
-        <div className="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
           <div className="bg-zinc-800 rounded-2xl w-[400px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
               <h3 className="font-semibold text-sm">笔刷组库</h3>

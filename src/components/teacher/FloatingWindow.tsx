@@ -89,7 +89,7 @@ export function FloatingWindow({
         top: position.y,
         width: size.width,
         height: size.height,
-        zIndex: isFocused ? 100 : 50,
+        zIndex: isFocused ? 40 : 30,
       }}
       onMouseDown={() => setIsFocused(true)}
     >
