@@ -25,6 +25,8 @@ interface BrushCanvasProps {
   onStartCameraCapture: () => void;
   onCancelCameraCapture: () => void;
   onTakePhoto: () => void;
+  onCaptureAndSave: () => void;
+  onCaptureAndDoodle: () => void;
   onSaveToLibrary: () => void;
   onSaveToBrushLibrary: () => void;
   onCancelEdit: () => void;
@@ -56,6 +58,8 @@ export function BrushCanvas({
   onStartCameraCapture,
   onCancelCameraCapture,
   onTakePhoto,
+  onCaptureAndSave,
+  onCaptureAndDoodle,
   onSaveToLibrary,
   onSaveToBrushLibrary,
   onCancelEdit,
@@ -68,7 +72,21 @@ export function BrushCanvas({
   if (cameraStatus === 'viewing') {
     return (
       <div className="flex flex-col items-center gap-4">
-        <div className="w-[400px] h-[400px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900">
+        {/* Video preview with checkerboard background */}
+        <div
+          className="w-[400px] h-[400px] rounded-lg overflow-hidden border border-zinc-600 relative bg-zinc-900"
+          style={{
+            backgroundImage: `
+              linear-gradient(45deg, #808080 25%, transparent 25%),
+              linear-gradient(-45deg, #808080 25%, transparent 25%),
+              linear-gradient(45deg, transparent 75%, #808080 75%),
+              linear-gradient(-45deg, transparent 75%, #808080 75%)
+            `,
+            backgroundSize: '16px 16px',
+            backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+            backgroundColor: '#c0c0c0'
+          }}
+        >
           <video
             ref={cameraVideoRef}
             autoPlay
@@ -76,10 +94,36 @@ export function BrushCanvas({
             muted
             className="absolute inset-0 w-full h-full object-contain"
           />
+          {/* Small preview canvas with adjustments (hidden, used for capture) */}
+          <canvas ref={cameraPreviewRef} className="hidden" width={200} height={200} />
         </div>
-        <div className="flex gap-2">
-          <button onClick={onTakePhoto} className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-medium">拍摄</button>
-          <button onClick={onCancelCameraCapture} className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-sm">取消</button>
+        {/* Adjustment sliders */}
+        <div className="flex flex-col items-center gap-2 w-full max-w-md">
+          <div className="flex items-center gap-4 w-full justify-center">
+            <span className="text-xs text-zinc-500 w-12">亮度</span>
+            <input type="range" min="0" max="200" value={imageBrightness} onChange={(e) => { onBrightnessChange(Number(e.target.value)); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
+            <span className="text-xs text-zinc-400 w-10">{imageBrightness}%</span>
+          </div>
+          <div className="flex items-center gap-4 w-full justify-center">
+            <span className="text-xs text-zinc-500 w-12">对比度</span>
+            <input type="range" min="0" max="200" value={imageContrast} onChange={(e) => { onContrastChange(Number(e.target.value)); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
+            <span className="text-xs text-zinc-400 w-10">{imageContrast}%</span>
+          </div>
+          <div className="flex items-center gap-4 w-full justify-center">
+            <span className="text-xs text-zinc-500 w-12">饱和度</span>
+            <input type="range" min="0" max="200" value={imageSaturation} onChange={(e) => { onSaturationChange(Number(e.target.value)); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
+            <span className="text-xs text-zinc-400 w-10">{imageSaturation}%</span>
+          </div>
+          <div className="flex items-center gap-4 w-full justify-center">
+            <span className="text-xs text-zinc-500 w-12">去背景</span>
+            <input type="range" min="0" max="256" value={bgRemoveStrength} onChange={(e) => { onBgRemoveStrengthChange(Number(e.target.value)); }} className="w-24 h-1 bg-zinc-700 rounded cursor-pointer" />
+            <span className="text-xs text-zinc-400 w-10">{bgRemoveStrength}</span>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button onClick={onCaptureAndSave} className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded text-sm font-medium">拍摄并保存</button>
+            <button onClick={onCaptureAndDoodle} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium">拍照并涂鸦</button>
+            <button onClick={onCancelCameraCapture} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-sm">取消</button>
+          </div>
         </div>
       </div>
     );

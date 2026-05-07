@@ -459,7 +459,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     }
   }, []);
 
-  // 更新摄像头预览（带去背景效果）- 提前声明以便在 useEffect 中使用
+  // 更新摄像头预览（带去背景效果 + 图像调整）- 提前声明以便在 useEffect 中使用
   const updateCameraPreview = useCallback(() => {
     if (!cameraStream || !cameraVideoRef.current || !cameraPreviewRef.current) return;
 
@@ -472,30 +472,59 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     previewCanvas.height = 200;
     ctx.drawImage(video, 0, 0, 200, 200);
 
-    if (removeWhiteBg) {
-      const imageData = ctx.getImageData(0, 0, 200, 200);
-      const data = imageData.data;
-      const threshold = bgRemoveStrength;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        if (r >= threshold && g >= threshold && b >= threshold) {
-          const avg = (r + g + b) / 3;
-          const alpha = Math.min(255, Math.max(0, (avg - threshold) * 16));
-          data[i + 3] = alpha;
+    const imageData = ctx.getImageData(0, 0, 200, 200);
+    const data = imageData.data;
+
+    // 应用亮度、对比度、饱和度调整
+    for (let i = 0; i < data.length; i += 4) {
+      let r = data[i];
+      let g = data[i + 1];
+      let b = data[i + 2];
+
+      // 亮度调整
+      const brightnessFactor = imageBrightness / 100;
+      r *= brightnessFactor;
+      g *= brightnessFactor;
+      b *= brightnessFactor;
+
+      // 对比度调整
+      const contrastFactor = imageContrast / 100;
+      const contrastMid = 128;
+      r = contrastMid + (r - contrastMid) * contrastFactor;
+      g = contrastMid + (g - contrastMid) * contrastFactor;
+      b = contrastMid + (b - contrastMid) * contrastFactor;
+
+      // 饱和度调整
+      const saturationFactor = imageSaturation / 100;
+      const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      r = gray + (r - gray) * saturationFactor;
+      g = gray + (g - gray) * saturationFactor;
+      b = gray + (b - gray) * saturationFactor;
+
+      // 白色背景去除
+      if (removeWhiteBg) {
+        const minComponent = Math.min(r, g, b);
+        if (minComponent >= bgRemoveStrength) {
+          const range = 255 - bgRemoveStrength;
+          const excess = (r + g + b) / 3 - bgRemoveStrength;
+          data[i + 3] = Math.max(0, Math.min(255, 255 - excess * (255 / range)));
         }
       }
-      ctx.putImageData(imageData, 0, 0);
+
+      data[i] = Math.max(0, Math.min(255, r));
+      data[i + 1] = Math.max(0, Math.min(255, g));
+      data[i + 2] = Math.max(0, Math.min(255, b));
     }
-  }, [cameraStream, removeWhiteBg, bgRemoveStrength]);
+
+    ctx.putImageData(imageData, 0, 0);
+  }, [cameraStream, removeWhiteBg, bgRemoveStrength, imageBrightness, imageContrast, imageSaturation]);
 
   // 更新摄像头预览
   useEffect(() => {
     if (cameraStatus === 'viewing' && cameraStream) {
       updateCameraPreview();
     }
-  }, [cameraStatus, cameraStream, removeWhiteBg, bgRemoveStrength, updateCameraPreview]);
+  }, [cameraStatus, cameraStream, removeWhiteBg, bgRemoveStrength, imageBrightness, imageContrast, imageSaturation, updateCameraPreview]);
 
   // Sync adjustment refs with state (to avoid stale closure issues in applyImageAdjustments)
   useEffect(() => { removeWhiteBgRef.current = removeWhiteBg; }, [removeWhiteBg]);
@@ -667,7 +696,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     cancelCameraCapture();
   };
 
-  // 拍摄照片（捕获后进入调整状态）
+  // 拍摄照片 - 捕获当前预览画面并进入调整状态
   const takePhoto = () => {
     if (!cameraVideoRef.current) return;
 
@@ -721,6 +750,102 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       }
     };
     captureWhenReady();
+  };
+
+  // 拍摄并保存 - 捕获画面并直接保存到笔刷库
+  const captureAndSave = () => {
+    const previewCanvas = cameraPreviewRef.current;
+    if (!previewCanvas) return;
+
+    // 停止摄像头
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      setCameraStream(null);
+    }
+
+    // 从预览画布获取调整后的图像
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = BRUSH_SIZE;
+    tempCanvas.height = BRUSH_SIZE;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    tempCtx.drawImage(previewCanvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+    const dataUrl = tempCanvas.toDataURL('image/png');
+
+    // 创建新笔刷预设
+    const newPreset: BrushPreset = {
+      id: Date.now().toString(),
+      name: `笔刷 ${Date.now()}`,
+      timestamp: Date.now(),
+      layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+    };
+
+    const updated = [...brushPresets, newPreset];
+    setBrushPresets(updated);
+    setBrushUpdateTrigger(t => t + 1);
+
+    // 重置状态
+    setCameraStatus('idle');
+    editingOriginalImageRef.current = null;
+    setRemoveWhiteBg(false);
+    setBgRemoveStrength(128);
+    setImageBrightness(100);
+    setImageContrast(100);
+    setImageSaturation(100);
+
+    alert('笔刷已保存到笔刷库！');
+  };
+
+  // 拍照并涂鸦 - 捕获画面并复制到涂鸦画布
+  const captureAndDoodle = () => {
+    const previewCanvas = cameraPreviewRef.current;
+    if (!previewCanvas) return;
+
+    // 停止摄像头
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      setCameraStream(null);
+    }
+
+    // 从预览画布获取调整后的图像并缩放到 400x400
+    const previewCtx = previewCanvas.getContext('2d');
+    if (!previewCtx) return;
+
+    const previewImageData = previewCtx.getImageData(0, 0, 200, 200);
+
+    // 创建 400x400 的图像数据
+    const targetCanvas = document.createElement('canvas');
+    targetCanvas.width = 400;
+    targetCanvas.height = 400;
+    const targetCtx = targetCanvas.getContext('2d');
+    if (!targetCtx) return;
+
+    // 创建临时 canvas 放置 200x200 图像
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 200;
+    tempCanvas.height = 200;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+    tempCtx.putImageData(previewImageData, 0, 0);
+
+    // 缩放到 400x400
+    targetCtx.drawImage(tempCanvas, 0, 0, 400, 400);
+
+    // 获取完整图像数据
+    const fullImageData = targetCtx.getImageData(0, 0, 400, 400);
+
+    // 存储待复制的图像数据
+    setPendingBrushImageData(fullImageData);
+
+    // 重置状态
+    setCameraStatus('idle');
+    editingOriginalImageRef.current = null;
+    setRemoveWhiteBg(false);
+    setBgRemoveStrength(128);
+    setImageBrightness(100);
+    setImageContrast(100);
+    setImageSaturation(100);
   };
 
   // 确认拍摄结果，从预览画布复制到编辑画布并返回涂鸦状态
@@ -1500,6 +1625,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                   onStartCameraCapture={startCameraCapture}
                   onCancelCameraCapture={cancelCameraCapture}
                   onTakePhoto={takePhoto}
+                  onCaptureAndSave={captureAndSave}
+                  onCaptureAndDoodle={captureAndDoodle}
                   onSaveToBrushLibrary={() => {
                     const canvas = adjustmentPreviewRef.current;
                     if (canvas) {
