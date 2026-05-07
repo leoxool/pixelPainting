@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { BrushPreset, BrushGroup, SortRule } from './types';
 import { BrushGroupSlot } from './BrushGroupSlot';
-import { BrushGrid } from './BrushGrid';
+import { PixiBrushGrid } from './PixiBrushGrid';
 import { FloatingWindow } from './FloatingWindow';
 import { getBrushGroups, saveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 
@@ -34,12 +34,20 @@ export function BrushGroupEditor({
   const [draggedBrushId, setDraggedBrushId] = useState<string | null>(null);
   const [savedGroups, setSavedGroups] = useState<BrushGroup[]>([]);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [showSlotsPanel, setShowSlotsPanel] = useState(true);
+  const [showSlotsPanel, setShowSlotsPanel] = useState(false);
+  const showSlotsPanelRef = useRef(false);
+  useEffect(() => {
+    showSlotsPanelRef.current = showSlotsPanel;
+  }, [showSlotsPanel]);
+
+  // Pointer-based drag state
+  const [isPointerDragging, setIsPointerDragging] = useState(false);
+  const pointerDragTargetSlotRef = useRef<number | null>(null);
 
   // Container refs for grid sizing
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  const [gridWidth, setGridWidth] = useState(600);
-  const [gridHeight, setGridHeight] = useState(300);
+  const [gridWidth, setGridWidth] = useState(800);
+  const [gridHeight, setGridHeight] = useState(600);
 
   // Load brush groups from IndexedDB
   const loadGroups = useCallback(async () => {
@@ -70,8 +78,15 @@ export function BrushGroupEditor({
   }, []);
 
   const handleDragStart = useCallback((e: React.DragEvent, presetId: string) => {
+    // 检测是否是 pointer 触发的拖动（空 types）
+    const isPointer = e.dataTransfer.types.length === 0;
+    setIsPointerDragging(isPointer);
+
     setDraggedBrushId(presetId);
-    e.dataTransfer.setData('text/plain', presetId);
+    if (!isPointer) {
+      // 标准 drag API 才设置 dataTransfer
+      e.dataTransfer.setData('text/plain', presetId);
+    }
     e.dataTransfer.effectAllowed = 'copy';
 
     // Create 40x40 drag image element
@@ -110,7 +125,33 @@ export function BrushGroupEditor({
 
   const handleDragEnd = useCallback(() => {
     setDraggedBrushId(null);
+    setIsPointerDragging(false);
+    pointerDragTargetSlotRef.current = null;
   }, []);
+
+  // Pointer drag enter slot
+  const handlePointerDragEnter = useCallback((slotIndex: number) => {
+    if (isPointerDragging) {
+      pointerDragTargetSlotRef.current = slotIndex;
+    }
+  }, [isPointerDragging]);
+
+  // Pointer drag leave slot
+  const handlePointerDragLeave = useCallback((slotIndex: number) => {
+    if (pointerDragTargetSlotRef.current === slotIndex) {
+      pointerDragTargetSlotRef.current = null;
+    }
+  }, []);
+
+  // Pointer drop on slot
+  const handlePointerDrop = useCallback((slotIndex: number) => {
+    if (!isPointerDragging || !draggedBrushId) return;
+
+    const preset = brushPresets.find(p => p.id === draggedBrushId);
+    if (preset) {
+      onSlotChange(slotIndex, preset);
+    }
+  }, [isPointerDragging, draggedBrushId, brushPresets, onSlotChange]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -119,14 +160,20 @@ export function BrushGroupEditor({
 
   const handleDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
     e.preventDefault();
+    // 优先使用 dataTransfer 中的数据，否则使用 draggedBrushId
     const brushId = e.dataTransfer.getData('text/plain') || draggedBrushId;
-    if (!brushId) return;
+    if (!brushId) {
+      return;
+    }
 
     const preset = brushPresets.find(p => p.id === brushId);
     if (preset) {
       onSlotChange(slotIndex, preset);
     }
-    setDraggedBrushId(null);
+    // 只有当数据来自 dataTransfer 时才清除 draggedBrushId（标准 drag API）
+    if (e.dataTransfer.types.length > 0 && Array.from(e.dataTransfer.types).includes('text/plain')) {
+      setDraggedBrushId(null);
+    }
   }, [draggedBrushId, brushPresets, onSlotChange]);
 
   const generateGroupName = () => {
@@ -185,7 +232,7 @@ export function BrushGroupEditor({
   return (
     <div className="flex flex-col h-full relative">
       {/* Sort controls - displayed at page top */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 border-b border-zinc-700 bg-zinc-800/50">
+      <div className="flex-shrink-0 w-full flex items-center gap-2 px-4 py-2 border-b border-zinc-700 bg-zinc-800/50 z-10">
         <span className="text-xs text-zinc-400">排序:</span>
         {(['time', 'brightness', 'saturation', 'hue'] as SortRule[]).map((rule) => (
           <button
@@ -203,8 +250,12 @@ export function BrushGroupEditor({
       </div>
 
       {/* Full page Brush Grid - takes remaining space */}
-      <div ref={gridContainerRef} className="flex-1 overflow-hidden">
-        <BrushGrid
+      <div
+        ref={gridContainerRef}
+        className="flex-1 overflow-hidden"
+        style={{ width: '100%', height: '100%', minHeight: '200px' }}
+      >
+        <PixiBrushGrid
           presets={brushPresets}
           sortRule={sortRule}
           containerWidth={gridWidth}
@@ -213,6 +264,15 @@ export function BrushGroupEditor({
           onPresetDragEnd={handleDragEnd}
           onSlotDrop={handleDrop}
           draggedBrushId={draggedBrushId}
+          onDropCompleted={() => {
+            setDraggedBrushId(null);
+            setIsPointerDragging(false);
+          }}
+          onViewModeChange={(mode) => {
+            if (mode === 'focused' && showSlotsPanelRef.current) {
+              setShowSlotsPanel(false);
+            }
+          }}
         />
       </div>
 
@@ -281,6 +341,9 @@ export function BrushGroupEditor({
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
                 draggedBrushId={draggedBrushId}
+                onPointerDragEnter={handlePointerDragEnter}
+                onPointerDragLeave={handlePointerDragLeave}
+                onPointerDrop={handlePointerDrop}
               />
             ))}
           </div>

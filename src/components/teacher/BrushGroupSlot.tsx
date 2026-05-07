@@ -10,6 +10,10 @@ interface BrushGroupSlotProps {
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, index: number) => void;
   draggedBrushId: string | null;
+  // 新增：pointer-based 拖动支持
+  onPointerDragEnter?: (slotIndex: number) => void;
+  onPointerDragLeave?: (slotIndex: number) => void;
+  onPointerDrop?: (slotIndex: number) => void;
 }
 
 export function BrushGroupSlot({
@@ -19,6 +23,9 @@ export function BrushGroupSlot({
   onDragOver,
   onDrop,
   draggedBrushId,
+  onPointerDragEnter,
+  onPointerDragLeave,
+  onPointerDrop,
 }: BrushGroupSlotProps) {
   const levelGray = getLevelGray(slotIndex);
   const layerData = brushPreset?.layers[0] || null;
@@ -29,6 +36,24 @@ export function BrushGroupSlot({
       onClick={() => onSlotClick(slotIndex)}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, slotIndex)}
+      onPointerEnter={() => {
+        // 通知父组件有 pointer 拖动进入
+        if (draggedBrushId && onPointerDragEnter) {
+          onPointerDragEnter(slotIndex);
+        }
+      }}
+      onPointerLeave={() => {
+        // 通知父组件有 pointer 拖动离开
+        if (draggedBrushId && onPointerDragLeave) {
+          onPointerDragLeave(slotIndex);
+        }
+      }}
+      onPointerUp={() => {
+        // 通知父组件在 pointer 拖动模式下完成放置
+        if (draggedBrushId && onPointerDrop) {
+          onPointerDrop(slotIndex);
+        }
+      }}
     >
       {/* Gray reference bar */}
       <div

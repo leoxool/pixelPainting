@@ -1870,7 +1870,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
 
         {/* Stage 2: Brush Group Edit */}
         {currentStage === 'group' && (
-          <div className="flex-1 relative">
+          <div className="flex flex-col flex-1 overflow-hidden">
             <BrushGroupEditor
               brushPresets={brushPresets}
               slots={brushGroupSlots}
