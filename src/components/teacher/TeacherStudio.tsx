@@ -149,6 +149,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const [renderTrigger, setRenderTrigger] = useState(0);
   // 用于触发笔刷缩略图更新
   const [brushUpdateTrigger, setBrushUpdateTrigger] = useState(0);
+  // 用于触发闪光效果
+  const [flashTrigger, setFlashTrigger] = useState(0);
   // 待应用的笔刷图像数据（从调整预览复制到编辑器）
   const [pendingBrushImageData, setPendingBrushImageData] = useState<ImageData | null>(null);
 
@@ -656,20 +658,6 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   // 启动摄像头拍摄
   const startCameraCapture = async () => {
     try {
-      // 重置图像调节值到初始状态
-      setBgRemoveStrength(256);
-      setImageBrightness(100);
-      setImageContrast(100);
-      setImageSaturation(100);
-      setRemoveWhiteBg(true);
-
-      // 同时更新 ref 值
-      bgRemoveStrengthRef.current = 256;
-      imageBrightnessRef.current = 100;
-      imageContrastRef.current = 100;
-      imageSaturationRef.current = 100;
-      removeWhiteBgRef.current = true;
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 800, height: 800, facingMode: 'environment' }
       });
@@ -755,206 +743,218 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   // 拍摄并保存 - 从视频流捕获当前帧并保存到笔刷库
   const captureAndSave = () => {
     const video = cameraVideoRef.current;
-    if (!video) return;
-
-    // 停止摄像头
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      setCameraStream(null);
+    if (!video) {
+      console.warn('captureAndSave: video element not found');
+      return;
     }
 
-    // 直接从视频元素捕获当前帧
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 200;
-    tempCanvas.height = 200;
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return;
+    // 等待视频准备好后再捕获
+    const captureFrame = () => {
+      // 直接从视频元素捕获当前帧（不停止摄像头，保持拍摄模式）
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 200;
+      tempCanvas.height = 200;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) return;
 
-    // 使用视频的实际宽高
-    const srcW = video.videoWidth || 200;
-    const srcH = video.videoHeight || 200;
-    tempCtx.drawImage(video, 0, 0, srcW, srcH, 0, 0, 200, 200);
+      const srcW = video.videoWidth || 200;
+      const srcH = video.videoHeight || 200;
+      tempCtx.drawImage(video, 0, 0, srcW, srcH, 0, 0, 200, 200);
 
-    // 获取原始图像数据并应用调整
-    const originalData = tempCtx.getImageData(0, 0, 200, 200);
-    const data = originalData.data;
+      // 获取原始图像数据并应用调整
+      const originalData = tempCtx.getImageData(0, 0, 200, 200);
+      const data = originalData.data;
 
-    for (let i = 0; i < data.length; i += 4) {
-      let r = data[i];
-      let g = data[i + 1];
-      let b = data[i + 2];
+      for (let i = 0; i < data.length; i += 4) {
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
 
-      // 应用亮度调整
-      const brightnessFactor = imageBrightness / 100;
-      r *= brightnessFactor;
-      g *= brightnessFactor;
-      b *= brightnessFactor;
+        // 应用亮度调整
+        const brightnessFactor = imageBrightness / 100;
+        r *= brightnessFactor;
+        g *= brightnessFactor;
+        b *= brightnessFactor;
 
-      // 应用对比度调整
-      const contrastFactor = imageContrast / 100;
-      const contrastMid = 128;
-      r = contrastMid + (r - contrastMid) * contrastFactor;
-      g = contrastMid + (g - contrastMid) * contrastFactor;
-      b = contrastMid + (b - contrastMid) * contrastFactor;
+        // 应用对比度调整
+        const contrastFactor = imageContrast / 100;
+        const contrastMid = 128;
+        r = contrastMid + (r - contrastMid) * contrastFactor;
+        g = contrastMid + (g - contrastMid) * contrastFactor;
+        b = contrastMid + (b - contrastMid) * contrastFactor;
 
-      // 应用饱和度调整
-      const saturationFactor = imageSaturation / 100;
-      const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      r = gray + (r - gray) * saturationFactor;
-      g = gray + (g - gray) * saturationFactor;
-      b = gray + (b - gray) * saturationFactor;
+        // 应用饱和度调整
+        const saturationFactor = imageSaturation / 100;
+        const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        r = gray + (r - gray) * saturationFactor;
+        g = gray + (g - gray) * saturationFactor;
+        b = gray + (b - gray) * saturationFactor;
 
-      // 应用去背景
-      if (removeWhiteBg) {
-        const minComponent = Math.min(r, g, b);
-        if (minComponent >= bgRemoveStrength) {
-          const range = 255 - bgRemoveStrength;
-          const excess = (r + g + b) / 3 - bgRemoveStrength;
-          data[i + 3] = Math.max(0, Math.min(255, 255 - excess * (255 / range)));
+        // 应用去背景
+        if (removeWhiteBg) {
+          const minComponent = Math.min(r, g, b);
+          if (minComponent >= bgRemoveStrength) {
+            const range = 255 - bgRemoveStrength;
+            const excess = (r + g + b) / 3 - bgRemoveStrength;
+            data[i + 3] = Math.max(0, Math.min(255, 255 - excess * (255 / range)));
+          }
         }
+
+        data[i] = Math.max(0, Math.min(255, r));
+        data[i + 1] = Math.max(0, Math.min(255, g));
+        data[i + 2] = Math.max(0, Math.min(255, b));
       }
 
-      data[i] = Math.max(0, Math.min(255, r));
-      data[i + 1] = Math.max(0, Math.min(255, g));
-      data[i + 2] = Math.max(0, Math.min(255, b));
-    }
+      // 绘制调整后的图像并转换为 dataUrl
+      const adjustedCanvas = document.createElement('canvas');
+      adjustedCanvas.width = 200;
+      adjustedCanvas.height = 200;
+      const adjustedCtx = adjustedCanvas.getContext('2d');
+      if (!adjustedCtx) return;
+      adjustedCtx.putImageData(originalData, 0, 0);
 
-    // 绘制调整后的图像并转换为 dataUrl
-    const adjustedCanvas = document.createElement('canvas');
-    adjustedCanvas.width = 200;
-    adjustedCanvas.height = 200;
-    const adjustedCtx = adjustedCanvas.getContext('2d');
-    if (!adjustedCtx) return;
-    adjustedCtx.putImageData(originalData, 0, 0);
+      // 缩放到 BRUSH_SIZE 并保存
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = BRUSH_SIZE;
+      finalCanvas.height = BRUSH_SIZE;
+      const finalCtx = finalCanvas.getContext('2d');
+      if (!finalCtx) return;
+      finalCtx.drawImage(adjustedCanvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+      const dataUrl = finalCanvas.toDataURL('image/png');
 
-    // 缩放到 BRUSH_SIZE 并保存
-    const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = BRUSH_SIZE;
-    finalCanvas.height = BRUSH_SIZE;
-    const finalCtx = finalCanvas.getContext('2d');
-    if (!finalCtx) return;
-    finalCtx.drawImage(adjustedCanvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-    const dataUrl = finalCanvas.toDataURL('image/png');
+      // 创建新笔刷预设
+      const newPreset: BrushPreset = {
+        id: Date.now().toString(),
+        name: `笔刷 ${Date.now()}`,
+        timestamp: Date.now(),
+        layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+      };
 
-    // 创建新笔刷预设
-    const newPreset: BrushPreset = {
-      id: Date.now().toString(),
-      name: `笔刷 ${Date.now()}`,
-      timestamp: Date.now(),
-      layers: [dataUrl, null, null, null, null, null, null, null, null, null],
+      const updated = [...brushPresets, newPreset];
+      setBrushPresets(updated);
+      setBrushUpdateTrigger(t => t + 1);
+      setFlashTrigger(t => t + 1);
+
+      // 不停止摄像头，不切换状态，留在拍摄模式继续拍摄
+      // 保留所有调整参数
     };
 
-    const updated = [...brushPresets, newPreset];
-    setBrushPresets(updated);
-    setBrushUpdateTrigger(t => t + 1);
-
-    // 重置状态
-    setCameraStatus('idle');
-    editingOriginalImageRef.current = null;
-    setRemoveWhiteBg(false);
-    setBgRemoveStrength(128);
-    setImageBrightness(100);
-    setImageContrast(100);
-    setImageSaturation(100);
-
-    alert('笔刷已保存到笔刷库！');
+    // 等待视频准备好后再捕获
+    if (video.readyState >= 2) {
+      requestAnimationFrame(captureFrame);
+    } else {
+      console.warn('captureAndSave: video not ready, waiting...');
+      setTimeout(captureAndSave, 100);
+    }
   };
 
   // 拍照并涂鸦 - 从视频流捕获当前帧并复制到涂鸦画布
   const captureAndDoodle = () => {
     const video = cameraVideoRef.current;
-    if (!video) return;
-
-    // 停止摄像头
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      setCameraStream(null);
+    if (!video) {
+      console.warn('captureAndDoodle: video element not found');
+      return;
     }
 
-    // 直接从视频元素捕获当前帧
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 200;
-    tempCanvas.height = 200;
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return;
+    // 等待视频准备好后再捕获
+    const captureFrame = () => {
+      const stream = cameraStream;
 
-    const srcW = video.videoWidth || 200;
-    const srcH = video.videoHeight || 200;
-    tempCtx.drawImage(video, 0, 0, srcW, srcH, 0, 0, 200, 200);
+      // 直接从视频元素捕获当前帧
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 200;
+      tempCanvas.height = 200;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) return;
 
-    // 获取原始图像数据并应用调整
-    const originalData = tempCtx.getImageData(0, 0, 200, 200);
-    const data = originalData.data;
+      const srcW = video.videoWidth || 200;
+      const srcH = video.videoHeight || 200;
+      tempCtx.drawImage(video, 0, 0, srcW, srcH, 0, 0, 200, 200);
 
-    for (let i = 0; i < data.length; i += 4) {
-      let r = data[i];
-      let g = data[i + 1];
-      let b = data[i + 2];
+      // 获取原始图像数据并应用调整
+      const originalData = tempCtx.getImageData(0, 0, 200, 200);
+      const data = originalData.data;
 
-      // 应用亮度调整
-      const brightnessFactor = imageBrightness / 100;
-      r *= brightnessFactor;
-      g *= brightnessFactor;
-      b *= brightnessFactor;
+      for (let i = 0; i < data.length; i += 4) {
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
 
-      // 应用对比度调整
-      const contrastFactor = imageContrast / 100;
-      const contrastMid = 128;
-      r = contrastMid + (r - contrastMid) * contrastFactor;
-      g = contrastMid + (g - contrastMid) * contrastFactor;
-      b = contrastMid + (b - contrastMid) * contrastFactor;
+        // 应用亮度调整
+        const brightnessFactor = imageBrightness / 100;
+        r *= brightnessFactor;
+        g *= brightnessFactor;
+        b *= brightnessFactor;
 
-      // 应用饱和度调整
-      const saturationFactor = imageSaturation / 100;
-      const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      r = gray + (r - gray) * saturationFactor;
-      g = gray + (g - gray) * saturationFactor;
-      b = gray + (b - gray) * saturationFactor;
+        // 应用对比度调整
+        const contrastFactor = imageContrast / 100;
+        const contrastMid = 128;
+        r = contrastMid + (r - contrastMid) * contrastFactor;
+        g = contrastMid + (g - contrastMid) * contrastFactor;
+        b = contrastMid + (b - contrastMid) * contrastFactor;
 
-      // 应用去背景
-      if (removeWhiteBg) {
-        const minComponent = Math.min(r, g, b);
-        if (minComponent >= bgRemoveStrength) {
-          const range = 255 - bgRemoveStrength;
-          const excess = (r + g + b) / 3 - bgRemoveStrength;
-          data[i + 3] = Math.max(0, Math.min(255, 255 - excess * (255 / range)));
+        // 应用饱和度调整
+        const saturationFactor = imageSaturation / 100;
+        const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        r = gray + (r - gray) * saturationFactor;
+        g = gray + (g - gray) * saturationFactor;
+        b = gray + (b - gray) * saturationFactor;
+
+        // 应用去背景
+        if (removeWhiteBg) {
+          const minComponent = Math.min(r, g, b);
+          if (minComponent >= bgRemoveStrength) {
+            const range = 255 - bgRemoveStrength;
+            const excess = (r + g + b) / 3 - bgRemoveStrength;
+            data[i + 3] = Math.max(0, Math.min(255, 255 - excess * (255 / range)));
+          }
         }
+
+        data[i] = Math.max(0, Math.min(255, r));
+        data[i + 1] = Math.max(0, Math.min(255, g));
+        data[i + 2] = Math.max(0, Math.min(255, b));
       }
 
-      data[i] = Math.max(0, Math.min(255, r));
-      data[i + 1] = Math.max(0, Math.min(255, g));
-      data[i + 2] = Math.max(0, Math.min(255, b));
+      // 绘制调整后的图像
+      const adjustedCanvas = document.createElement('canvas');
+      adjustedCanvas.width = 200;
+      adjustedCanvas.height = 200;
+      const adjustedCtx = adjustedCanvas.getContext('2d');
+      if (!adjustedCtx) return;
+      adjustedCtx.putImageData(originalData, 0, 0);
+
+      // 缩放到 400x400
+      const targetCanvas = document.createElement('canvas');
+      targetCanvas.width = 400;
+      targetCanvas.height = 400;
+      const targetCtx = targetCanvas.getContext('2d');
+      if (!targetCtx) return;
+      targetCtx.drawImage(adjustedCanvas, 0, 0, 400, 400);
+
+      const fullImageData = targetCtx.getImageData(0, 0, 400, 400);
+
+      // 存储待复制的图像数据
+      setPendingBrushImageData(fullImageData);
+
+      // 停止摄像头（在捕获之后）
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        setCameraStream(null);
+      }
+
+      // 切换到涂鸦模式，保留调整参数
+      setCameraStatus('idle');
+      editingOriginalImageRef.current = null;
+      // 不重置调整参数，保留以便返回拍摄模式时使用
+    };
+
+    // 等待视频准备好后再捕获
+    if (video.readyState >= 2) {
+      requestAnimationFrame(captureFrame);
+    } else {
+      console.warn('captureAndDoodle: video not ready, waiting...');
+      setTimeout(captureAndDoodle, 100);
     }
-
-    // 绘制调整后的图像
-    const adjustedCanvas = document.createElement('canvas');
-    adjustedCanvas.width = 200;
-    adjustedCanvas.height = 200;
-    const adjustedCtx = adjustedCanvas.getContext('2d');
-    if (!adjustedCtx) return;
-    adjustedCtx.putImageData(originalData, 0, 0);
-
-    // 缩放到 400x400
-    const targetCanvas = document.createElement('canvas');
-    targetCanvas.width = 400;
-    targetCanvas.height = 400;
-    const targetCtx = targetCanvas.getContext('2d');
-    if (!targetCtx) return;
-    targetCtx.drawImage(adjustedCanvas, 0, 0, 400, 400);
-
-    const fullImageData = targetCtx.getImageData(0, 0, 400, 400);
-
-    // 存储待复制的图像数据
-    setPendingBrushImageData(fullImageData);
-
-    // 重置状态
-    setCameraStatus('idle');
-    editingOriginalImageRef.current = null;
-    setRemoveWhiteBg(false);
-    setBgRemoveStrength(128);
-    setImageBrightness(100);
-    setImageContrast(100);
-    setImageSaturation(100);
   };
 
   // 确认拍摄结果，从预览画布复制到编辑画布并返回涂鸦状态
@@ -1717,6 +1717,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                   singleBrushEditorRef={singleBrushEditorRef}
                   cameraVideoRef={cameraVideoRef}
                   cameraPreviewRef={cameraPreviewRef}
+                  cameraStream={cameraStream}
+                  flashTrigger={flashTrigger}
                   adjustmentPreviewRef={adjustmentPreviewRef}
                   editingOriginalImageRef={editingOriginalImageRef}
                   removeWhiteBg={removeWhiteBg}
@@ -1754,7 +1756,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                         };
                         const updated = [...brushPresets, newPreset];
                         saveBrushPresets(updated);
-                        alert('已保存到笔刷库！');
+                        setFlashTrigger(t => t + 1);
                       }
                     }
                   }}
@@ -1776,7 +1778,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                         };
                         const updated = [...brushPresets, newPreset];
                         saveBrushPresets(updated);
-                        alert('已保存到笔刷库！');
+                        setFlashTrigger(t => t + 1);
                       }
                     }
                   }}
