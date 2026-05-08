@@ -2055,6 +2055,12 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
           width={SOURCE_WIDTH}
           height={SOURCE_HEIGHT}
         />
+        {/* Persistent Output Canvas for downloads */}
+        <canvas
+          ref={outputCanvasRef}
+          width={SOURCE_WIDTH}
+          height={SOURCE_HEIGHT}
+        />
       </div>
 
       {/* Sync display canvases with actual brush canvases */}
