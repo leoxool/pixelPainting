@@ -2045,8 +2045,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
           <canvas
             key={`persistent-brush-${index}`}
             ref={(el) => { brushCanvasesRef.current[index] = el; }}
-            width={100}
-            height={100}
+            width={BRUSH_SIZE}
+            height={BRUSH_SIZE}
           />
         ))}
         {/* Persistent Source Canvas */}

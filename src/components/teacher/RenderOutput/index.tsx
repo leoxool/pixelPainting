@@ -320,8 +320,12 @@ export function RenderOutputPanel({
             刷新
           </button>
           <button onClick={() => {
+            // Render first to ensure canvas is up to date
+            renderArt();
+            // Use timestamp for unique filename
+            const timestamp = Date.now();
             const link = document.createElement('a');
-            link.download = 'mosaic-art.png';
+            link.download = `mosaic-art-${timestamp}.png`;
             link.href = outputCanvasRef.current?.toDataURL() || '';
             link.click();
           }} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs">
