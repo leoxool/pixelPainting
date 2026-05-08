@@ -583,8 +583,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
       sourceAspectRatio,
       gridSizeX,
       gridSizeY,
+      sizeJitter,
+      rotationJitter,
+      enableFlip,
     });
-  }, [sourceAspectRatio, gridSizeX, gridSizeY]);
+  }, [sourceAspectRatio, gridSizeX, gridSizeY, sizeJitter, rotationJitter, enableFlip]);
 
   useEffect(() => {
     if (isInitialized) {

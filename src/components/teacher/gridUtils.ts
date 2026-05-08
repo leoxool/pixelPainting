@@ -98,6 +98,9 @@ interface RenderArtParams {
   sourceAspectRatio: number;
   gridSizeX: number;
   gridSizeY: number;
+  sizeJitter: number;
+  rotationJitter: number;
+  enableFlip: boolean;
 }
 
 interface BrushLayer {
@@ -118,6 +121,9 @@ export function renderArt({
   sourceAspectRatio,
   gridSizeX,
   gridSizeY,
+  sizeJitter,
+  rotationJitter,
+  enableFlip,
 }: RenderArtParams): void {
   const outputCanvas = outputCanvasRef.current;
   const outputCtx = outputCtxRef.current;
@@ -153,11 +159,51 @@ export function renderArt({
   });
   if (grid.length === 0) return;
 
+  // Create a temporary canvas for applying transformations
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = BRUSH_SIZE;
+  tempCanvas.height = BRUSH_SIZE;
+  const tempCtx = tempCanvas.getContext('2d');
+
+  // Simple hash function for deterministic randomness
+  const hash = (x: number, y: number, seed: number = 0): number => {
+    return ((Math.sin(x * 127.1 + y * 311.7 + seed) * 43758.5453) % 1 + 1) % 1;
+  };
+
   for (let row = 0; row < gridSizeY; row++) {
     for (let col = 0; col < gridSizeX; col++) {
       const layer = brushLayersRef.current[grid[row][col].level];
-      if (layer) {
-        outputCtx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+      if (layer && tempCtx) {
+        tempCtx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+
+        // Apply size jitter
+        const k = sizeJitter / 100;
+        const randSize = hash(col, row, 1);
+        const sizeFactor = 1.0 - k * 0.75 + randSize * k * 3.75;
+        const size = BRUSH_SIZE * sizeFactor;
+
+        // Apply rotation jitter
+        const randRot = hash(col, row, 2);
+        const maxRot = (rotationJitter * Math.PI) / 180;
+        const rotation = (randRot - 0.5) * 2 * maxRot;
+
+        // Apply flip
+        const randFlip = hash(col, row, 3);
+        const flip = enableFlip && randFlip > 0.5;
+
+        // Calculate scaled drawing position
+        const scaledSize = Math.min(cellWidth, cellHeight) * sizeFactor;
+        const dx = (cellWidth - scaledSize) / 2;
+        const dy = (cellHeight - scaledSize) / 2;
+
+        tempCtx.save();
+        tempCtx.translate(BRUSH_SIZE / 2, BRUSH_SIZE / 2);
+        tempCtx.rotate(rotation);
+        if (flip) tempCtx.scale(-1, 1);
+        tempCtx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, -scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize);
+        tempCtx.restore();
+
+        outputCtx.drawImage(tempCanvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, col * cellWidth + dx, row * cellHeight + dy, scaledSize, scaledSize);
       }
     }
   }
