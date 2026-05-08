@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { TeacherStudio } from '@/components/teacher/TeacherStudio';
+import { TopBar } from '@/components/teacher/TopBar';
 import type { Asset, RoomMember } from '@/lib/supabase/types';
 
 interface Room {
@@ -23,6 +24,8 @@ interface TeacherRoomClientProps {
   members?: RoomMember[];
 }
 
+type Stage = 'single' | 'group' | 'render';
+
 export function TeacherRoomClient({ room, assets: initialAssets, members = [] }: TeacherRoomClientProps) {
   const [assets, setAssets] = useState<Asset[]>(initialAssets);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -31,6 +34,7 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showStudentPanel, setShowStudentPanel] = useState(false);
   const [studentListCollapsed, setStudentListCollapsed] = useState(false);
+  const [currentStage, setCurrentStage] = useState<Stage>('single');
   const supabase = createClient();
   const teacherStudioRef = useRef<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>(null);
 
@@ -152,6 +156,8 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
           <span className="rounded bg-[#27272a] px-2 py-1 font-mono text-xs text-[#a1a1aa]">
             {room.join_code}
           </span>
+          {/* Stage toggle buttons */}
+          <TopBar currentStage={currentStage} onStageChange={setCurrentStage} />
         </div>
 
         <div className="flex items-center gap-2">
@@ -275,7 +281,11 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
 
         {/* Main Content */}
         <div className="flex-1 overflow-hidden">
-          <TeacherStudio ref={teacherStudioRef} />
+          <TeacherStudio
+            ref={teacherStudioRef}
+            currentStage={currentStage}
+            onStageChange={setCurrentStage}
+          />
         </div>
       </div>
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { SettingsPanel } from './SettingsPanel';
+
 // Data source panel for render output tab
 interface DataSourcePanelProps {
   dataSource: 'webcam' | 'image';
@@ -12,6 +14,19 @@ interface DataSourcePanelProps {
   onOpenBrushLibrary: () => void;
   imageInputRef?: React.RefObject<HTMLInputElement | null>;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  // Settings panel props
+  gridSamplingSize: number;
+  sizeJitter: number;
+  rotationJitter: number;
+  enableFlip: boolean;
+  enableMergeOptimization: boolean;
+  canvasBackgroundColor: string;
+  onGridSamplingSizeChange: (size: number) => void;
+  onSizeJitterChange: (size: number) => void;
+  onRotationJitterChange: (rotation: number) => void;
+  onEnableFlipChange: (enabled: boolean) => void;
+  onEnableMergeOptimizationChange: (enabled: boolean) => void;
+  onCanvasBackgroundColorChange: (color: string) => void;
 }
 
 export function DataSourcePanel({
@@ -25,6 +40,18 @@ export function DataSourcePanel({
   onOpenBrushLibrary,
   imageInputRef,
   videoRef,
+  gridSamplingSize,
+  sizeJitter,
+  rotationJitter,
+  enableFlip,
+  enableMergeOptimization,
+  canvasBackgroundColor,
+  onGridSamplingSizeChange,
+  onSizeJitterChange,
+  onRotationJitterChange,
+  onEnableFlipChange,
+  onEnableMergeOptimizationChange,
+  onCanvasBackgroundColorChange,
 }: DataSourcePanelProps) {
   return (
     <div className="flex w-64 flex-shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#27272a] bg-[#18181b] p-3">
@@ -74,6 +101,22 @@ export function DataSourcePanel({
         </svg>
         加载笔刷组
       </button>
+
+      {/* Settings Panel - same as fullscreen mode */}
+      <SettingsPanel
+        gridSamplingSize={gridSamplingSize}
+        sizeJitter={sizeJitter}
+        rotationJitter={rotationJitter}
+        enableFlip={enableFlip}
+        enableMergeOptimization={enableMergeOptimization}
+        canvasBackgroundColor={canvasBackgroundColor}
+        onGridSamplingSizeChange={onGridSamplingSizeChange}
+        onSizeJitterChange={onSizeJitterChange}
+        onRotationJitterChange={onRotationJitterChange}
+        onEnableFlipChange={onEnableFlipChange}
+        onEnableMergeOptimizationChange={onEnableMergeOptimizationChange}
+        onCanvasBackgroundColorChange={onCanvasBackgroundColorChange}
+      />
     </div>
   );
 }

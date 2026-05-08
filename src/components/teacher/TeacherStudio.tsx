@@ -14,7 +14,7 @@ import { RenderOutputPanel } from './RenderOutput';
 import { getLevelGray, extractGridData, renderArt } from './gridUtils';
 import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset, getBrushGroups as dbGetBrushGroups, saveBrushGroups as dbSaveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 import { FloatingWindow } from './FloatingWindow';
-import { ShortcutSidebar } from './ShortcutSidebar';
+import { TopBar } from './TopBar';
 import JSZip from 'jszip';
 
 type DataSource = 'webcam' | 'image';
@@ -74,7 +74,7 @@ function SyncDisplayCanvases({ trigger, brushLayers }: { trigger: number; brushL
 }
 
 // Component to sync source display canvas with actual source canvas
-function SyncSourceDisplay({ trigger, sourceImageData }: { trigger: number; sourceImageData: ImageData | null }) {
+function SyncSourceDisplay({ trigger, sourceImageData, currentStage }: { trigger: number; sourceImageData: ImageData | null; currentStage: string }) {
   useEffect(() => {
     if (!sourceImageData) return;
     const displayCanvas = document.getElementById('source-display-canvas') as HTMLCanvasElement;
@@ -86,11 +86,19 @@ function SyncSourceDisplay({ trigger, sourceImageData }: { trigger: number; sour
         ctx.putImageData(sourceImageData, 0, 0);
       }
     }
-  }, [trigger, sourceImageData]);
+  }, [trigger, sourceImageData, currentStage]);
   return null;
 }
 
-export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<string, unknown>, ref: React.Ref<{ importBrushStrip: (imageUrl: string) => Promise<void> }>) {
+interface TeacherStudioProps {
+  currentStage: Stage;
+  onStageChange: (stage: Stage) => void;
+}
+
+export const TeacherStudio = forwardRef(function TeacherStudio(
+  { currentStage, onStageChange }: TeacherStudioProps,
+  ref: React.Ref<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>
+) {
   const [activeTab, setActiveTab] = useState<TabType>('brushEdit');
   const [dataSource, setDataSource] = useState<DataSource>('webcam');
   const [isWebcamActive, setIsWebcamActive] = useState(false);
@@ -160,7 +168,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
   const [brushGroupUpdateTrigger, setBrushGroupUpdateTrigger] = useState(0);
 
   // Stage-based navigation (replaces tab + brushEditMode)
-  const [currentStage, setCurrentStage] = useState<Stage>('single');
+// Use props from parent, not internal state
+// const [currentStage, setCurrentStage] = useState<Stage>('single');
 
   // Floating window visibility states
   const [showBrushLibraryPanel, setShowBrushLibraryPanel] = useState(true);
@@ -1609,13 +1618,13 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
 
       switch (e.key.toLowerCase()) {
         case '1':
-          setCurrentStage('single');
+          onStageChange('single');
           break;
         case '2':
-          setCurrentStage('group');
+          onStageChange('group');
           break;
         case '3':
-          setCurrentStage('render');
+          onStageChange('render');
           break;
         case 'f':
           setIsFullscreen(prev => !prev);
@@ -1624,7 +1633,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [onStageChange]);
 
   // Toggle floating panel based on stage
   useEffect(() => {
@@ -1652,18 +1661,76 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
         className="hidden"
       />
 
-      {/* Left: Shortcut Sidebar */}
-      <ShortcutSidebar
-        currentStage={currentStage}
-        onStageChange={setCurrentStage}
-        onFullscreen={() => setIsFullscreen(prev => !prev)}
-      />
-
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Stage 1: Single Brush Edit */}
         {currentStage === 'single' && (
           <div className="flex flex-1 overflow-hidden">
+            {/* Left: Brush Library Panel */}
+            <div className={`flex-shrink-0 border-r border-zinc-700 bg-zinc-800 flex flex-col transition-all duration-300 ${isBrushLibraryCollapsed ? 'w-12' : 'w-64'}`}>
+              {/* Collapse toggle */}
+              <button
+                onClick={() => setIsBrushLibraryCollapsed(prev => !prev)}
+                className="p-2 hover:bg-zinc-700 flex items-center justify-center"
+                title={isBrushLibraryCollapsed ? '展开笔刷库' : '收起笔刷库'}
+              >
+                <svg className={`w-5 h-5 text-zinc-400 transition-transform ${isBrushLibraryCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Panel header and content - hidden when collapsed */}
+              {!isBrushLibraryCollapsed && (
+                <BrushLibraryPanel
+                  brushPresets={brushPresets}
+                  hoveredPresetId={hoveredPresetId}
+                  onHoverPreset={setHoveredPresetId}
+                  onSelectPreset={(preset) => {
+                    const firstLayer = preset.layers[0];
+                    if (firstLayer) {
+                      const img = new Image();
+                      img.onload = () => {
+                        const canvas = singleBrushEditorRef.current;
+                        if (canvas) {
+                          const ctx = canvas.getContext('2d');
+                          if (ctx) {
+                            ctx.clearRect(0, 0, 400, 400);
+                            ctx.drawImage(img, 0, 0, 400, 400);
+                          }
+                        }
+                      };
+                      img.src = firstLayer;
+                    }
+                  }}
+                  onDeletePreset={deletePreset}
+                  onImport={() => brushImportInputRef.current?.click()}
+                  onExport={async () => {
+                    const zip = new JSZip();
+                    brushPresets.forEach((preset, index) => {
+                      const layer = preset.layers[0];
+                      if (layer) {
+                        const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                          bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        zip.file(`brush_${index + 1}.png`, bytes);
+                      }
+                    });
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `brushes-${Date.now()}.zip`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  brushImportInputRef={brushImportInputRef}
+                />
+              )}
+            </div>
+
             {/* Center: Single Brush Editor Canvas */}
             <div className="flex-1 flex flex-col p-6">
               {/* Tab Toggle - 拍摄/涂鸦 buttons */}
@@ -1800,71 +1867,6 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
                 />
               </div>
             </div>
-
-            {/* Right: Brush Library Panel */}
-            <div className={`flex-shrink-0 border-l border-zinc-700 bg-zinc-800 flex flex-col transition-all duration-300 ${isBrushLibraryCollapsed ? 'w-12' : 'w-64'}`}>
-              {/* Collapse toggle */}
-              <button
-                onClick={() => setIsBrushLibraryCollapsed(prev => !prev)}
-                className="p-2 hover:bg-zinc-700 flex items-center justify-center"
-                title={isBrushLibraryCollapsed ? '展开笔刷库' : '收起笔刷库'}
-              >
-                <svg className={`w-5 h-5 text-zinc-400 transition-transform ${isBrushLibraryCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-
-              {/* Panel header and content - hidden when collapsed */}
-              {!isBrushLibraryCollapsed && (
-                <BrushLibraryPanel
-                  brushPresets={brushPresets}
-                  hoveredPresetId={hoveredPresetId}
-                  onHoverPreset={setHoveredPresetId}
-                  onSelectPreset={(preset) => {
-                    const firstLayer = preset.layers[0];
-                    if (firstLayer) {
-                      const img = new Image();
-                      img.onload = () => {
-                        const canvas = singleBrushEditorRef.current;
-                        if (canvas) {
-                          const ctx = canvas.getContext('2d');
-                          if (ctx) {
-                            ctx.clearRect(0, 0, 400, 400);
-                            ctx.drawImage(img, 0, 0, 400, 400);
-                          }
-                        }
-                      };
-                      img.src = firstLayer;
-                    }
-                  }}
-                  onDeletePreset={deletePreset}
-                  onImport={() => brushImportInputRef.current?.click()}
-                  onExport={async () => {
-                    const zip = new JSZip();
-                    brushPresets.forEach((preset, index) => {
-                      const layer = preset.layers[0];
-                      if (layer) {
-                        const base64Data = layer.replace(/^data:image\/\w+;base64,/, '');
-                        const binaryString = atob(base64Data);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                          bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        zip.file(`brush_${index + 1}.png`, bytes);
-                      }
-                    });
-                    const blob = await zip.generateAsync({ type: 'blob' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `brushes-${Date.now()}.zip`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  brushImportInputRef={brushImportInputRef}
-                />
-              )}
-            </div>
           </div>
         )}
 
@@ -1904,6 +1906,18 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
               }}
               imageInputRef={imageInputRef}
               videoRef={videoRef}
+              gridSamplingSize={gridSamplingSize}
+              sizeJitter={sizeJitter}
+              rotationJitter={rotationJitter}
+              enableFlip={enableFlip}
+              enableMergeOptimization={enableMergeOptimization}
+              canvasBackgroundColor={canvasBackgroundColor}
+              onGridSamplingSizeChange={setGridSamplingSize}
+              onSizeJitterChange={setSizeJitter}
+              onRotationJitterChange={setRotationJitter}
+              onEnableFlipChange={setEnableFlip}
+              onEnableMergeOptimizationChange={setEnableMergeOptimization}
+              onCanvasBackgroundColorChange={setCanvasBackgroundColor}
             />
 
             <RenderOutputPanel
@@ -1940,6 +1954,12 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
               handleMouseMove={handleMouseMove}
               handleMouseUp={handleMouseUp}
               renderArt={handleRenderArt}
+              onOpenBrushLibrary={() => {
+                dbGetBrushGroups().then(groups => {
+                  setBrushGroupsForLoad(groups);
+                  setShowBrushGroupLoadModal(true);
+                });
+              }}
             />
           </div>
         )}
@@ -2041,7 +2061,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(_props: Record<st
       <SyncDisplayCanvases trigger={brushUpdateTrigger} brushLayers={brushLayersRef.current} />
 
       {/* Sync source display canvas */}
-      <SyncSourceDisplay trigger={sourceUpdateTrigger} sourceImageData={sourceImageDataRef.current} />
+      <SyncSourceDisplay trigger={sourceUpdateTrigger} sourceImageData={sourceImageDataRef.current} currentStage={currentStage} />
     </div>
   );
 });
