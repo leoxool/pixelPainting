@@ -22,11 +22,12 @@ interface TeacherRoomClientProps {
   room: Room;
   assets: Asset[];
   members?: RoomMember[];
+  onBrushGroupFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
 type Stage = 'single' | 'group' | 'render';
 
-export function TeacherRoomClient({ room, assets: initialAssets, members = [] }: TeacherRoomClientProps) {
+export function TeacherRoomClient({ room, assets: initialAssets, members = [], onBrushGroupFullscreenChange }: TeacherRoomClientProps) {
   const [assets, setAssets] = useState<Asset[]>(initialAssets);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
@@ -35,6 +36,7 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
   const [showStudentPanel, setShowStudentPanel] = useState(false);
   const [studentListCollapsed, setStudentListCollapsed] = useState(false);
   const [currentStage, setCurrentStage] = useState<Stage>('single');
+  const [isBrushGroupFullscreen, setIsBrushGroupFullscreen] = useState(false);
   const supabase = createClient();
   const teacherStudioRef = useRef<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>(null);
 
@@ -106,6 +108,11 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
     };
   }, [room.id, supabase]);
 
+  // Propagate brush group fullscreen state to parent
+  useEffect(() => {
+    onBrushGroupFullscreenChange?.(isBrushGroupFullscreen);
+  }, [isBrushGroupFullscreen, onBrushGroupFullscreenChange]);
+
   const leaveRoom = async () => {
     if (!confirm('离开此房间？')) {
       return;
@@ -147,8 +154,8 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#09090b]">
-      {/* Top Bar */}
-      <header className="flex h-14 items-center justify-between border-b border-[#27272a] bg-[#18181b] px-4">
+      {/* Top Bar - hidden when brush group editor is in fullscreen album mode */}
+      <header className={`flex h-14 items-center justify-between border-b border-[#27272a] bg-[#18181b] px-4 ${isBrushGroupFullscreen ? 'hidden' : ''}`}>
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold text-[#fafafa]">
             {room.name || 'Untitled Room'}
@@ -285,6 +292,7 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [] }:
             ref={teacherStudioRef}
             currentStage={currentStage}
             onStageChange={setCurrentStage}
+            onBrushGroupFullscreenChange={setIsBrushGroupFullscreen}
           />
         </div>
       </div>

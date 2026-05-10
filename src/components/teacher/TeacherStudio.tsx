@@ -60,10 +60,11 @@ type TabType = 'brushEdit' | 'renderOutput';
 interface TeacherStudioProps {
   currentStage: Stage;
   onStageChange: (stage: Stage) => void;
+  onBrushGroupFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
 export const TeacherStudio = forwardRef(function TeacherStudio(
-  { currentStage, onStageChange }: TeacherStudioProps,
+  { currentStage, onStageChange, onBrushGroupFullscreenChange }: TeacherStudioProps,
   ref: React.Ref<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>
 ) {
   const [dataSource, setDataSource] = useState<DataSource>('webcam');
@@ -75,6 +76,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   const [editingBrushIndex, setEditingBrushIndex] = useState<number | null>(null);
   const [brushColor, setBrushColor] = useState('#000000');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Track brush group editor fullscreen mode (album mode)
+  const [isBrushGroupFullscreen, setIsBrushGroupFullscreen] = useState(false);
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -1755,6 +1758,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
     }
   }, [currentStage]);
 
+  // Propagate brush group fullscreen state to parent (TeacherRoomClient)
+  useEffect(() => {
+    onBrushGroupFullscreenChange?.(isBrushGroupFullscreen);
+  }, [isBrushGroupFullscreen, onBrushGroupFullscreenChange]);
+
   return (
     <div className="flex h-full bg-[#09090b] text-[#fafafa]">
       {/* Hidden brush import file input */}
@@ -1993,6 +2001,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
               brushUpdateTrigger={brushUpdateTrigger}
               onLoadGroup={handleLoadBrushGroup}
               brushGroupUpdateTrigger={brushGroupUpdateTrigger}
+              onFullscreenModeChange={setIsBrushGroupFullscreen}
             />
           </div>
         )}

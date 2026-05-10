@@ -85,6 +85,7 @@ interface BrushGroupEditorProps {
   brushUpdateTrigger: number;
   onLoadGroup: (group: BrushGroup) => void;
   brushGroupUpdateTrigger?: number;
+  onFullscreenModeChange?: (isFullscreen: boolean) => void;
 }
 
 export function BrushGroupEditor({
@@ -97,6 +98,7 @@ export function BrushGroupEditor({
   brushUpdateTrigger,
   onLoadGroup,
   brushGroupUpdateTrigger = 0,
+  onFullscreenModeChange,
 }: BrushGroupEditorProps) {
   const [sortRule, setSortRule] = useState<SortRule>('time');
   const [draggedBrushId, setDraggedBrushId] = useState<string | null>(null);
@@ -326,11 +328,13 @@ export function BrushGroupEditor({
           setIsFullscreen(false);
           setIsFocused(false);
           setMode('edit');
+          onFullscreenModeChange?.(false);
         } else {
           // Enter browse mode, focused view, and fullscreen
           setMode('browse');
           setIsFullscreen(true);
           setEnterFocusedTrigger(prev => prev + 1);
+          onFullscreenModeChange?.(true);
         }
       } else if (e.key === 'Escape' && isFocused) {
         // Exit focused mode but stay in browse mode
@@ -339,7 +343,7 @@ export function BrushGroupEditor({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFocused, isFullscreen]);
+  }, [isFocused, isFullscreen, onFullscreenModeChange]);
 
   return (
     <div className="flex flex-col h-full relative">
