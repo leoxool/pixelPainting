@@ -1747,6 +1747,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
           if (currentStage === 'render') {
             e.preventDefault();
             stopWebcam();
+            stopRenderLoop();
             setDataSource('image');
             imageInputRef.current?.click();
           }
