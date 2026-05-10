@@ -21,6 +21,7 @@ export function TeacherParticleCanvas({
   opacityJitter,
   enableFlip,
   enableMergeOptimization,
+  circularBrush,
   backgroundColor,
   isFullscreen,
   transform,
@@ -41,6 +42,7 @@ export function TeacherParticleCanvas({
   opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
+  circularBrush: boolean;
   backgroundColor?: string;
   isFullscreen: boolean;
   transform: { scale: number; x: number; y: number };
@@ -61,7 +63,7 @@ export function TeacherParticleCanvas({
   const [displaySize, setDisplaySize] = useState({ width: 400, height: 400 });
 
   // Texture cache: reuse textures across meshes with same level
-  const textureCacheRef = useRef<Map<number, THREE.Texture>>(new Map());
+  const textureCacheRef = useRef<Map<string, THREE.Texture>>(new Map());
 
   // Luminance cache: avoid recalculating when source hasn't changed
   const luminanceCacheRef = useRef<{
@@ -92,19 +94,39 @@ export function TeacherParticleCanvas({
   };
 
   // Get or create cached texture for a level
-  const getCachedTexture = useCallback((level: number, brushLayer: BrushLayer | null): THREE.Texture => {
-    if (textureCacheRef.current.has(level)) {
-      return textureCacheRef.current.get(level)!;
+  const getCachedTexture = useCallback((level: number, brushLayer: BrushLayer | null, circularBrush: boolean): THREE.Texture => {
+    const cacheKey = circularBrush ? `circular_${level}` : `normal_${level}`;
+    if (textureCacheRef.current.has(cacheKey)) {
+      return textureCacheRef.current.get(cacheKey)!;
     }
     let tex: THREE.Texture;
     if (brushLayer?.canvas) {
-      tex = new THREE.CanvasTexture(brushLayer.canvas);
+      if (circularBrush) {
+        // Create circular masked version of the brush texture
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = BRUSH_TEXTURE_SIZE;
+        tempCanvas.height = BRUSH_TEXTURE_SIZE;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (tempCtx) {
+          tempCtx.save();
+          // Draw circular clipping path
+          tempCtx.beginPath();
+          tempCtx.arc(BRUSH_TEXTURE_SIZE / 2, BRUSH_TEXTURE_SIZE / 2, BRUSH_TEXTURE_SIZE / 2, 0, Math.PI * 2);
+          tempCtx.clip();
+          // Draw the brush image
+          tempCtx.drawImage(brushLayer.canvas, 0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
+          tempCtx.restore();
+        }
+        tex = new THREE.CanvasTexture(tempCanvas);
+      } else {
+        tex = new THREE.CanvasTexture(brushLayer.canvas);
+      }
       tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
     } else {
       tex = createPlaceholderTexture(level);
     }
-    textureCacheRef.current.set(level, tex);
+    textureCacheRef.current.set(cacheKey, tex);
     return tex;
   }, []);
 
@@ -344,7 +366,7 @@ export function TeacherParticleCanvas({
           if (allSame) {
             // Create merged 2x2 mesh
             const level = level00;
-            const texture = getCachedTexture(level, brushLayers[level]);
+            const texture = getCachedTexture(level, brushLayers[level], circularBrush);
             texturesRef.current.push(texture);
 
             const mergedSize = BRUSH_TEXTURE_SIZE * 2;
@@ -382,7 +404,7 @@ export function TeacherParticleCanvas({
             ];
             for (const [i, j, level] of positions) {
               const idx = i * gridSizeX + j;
-              const texture = getCachedTexture(level, brushLayers[level]);
+              const texture = getCachedTexture(level, brushLayers[level], circularBrush);
               texturesRef.current.push(texture);
 
               const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -415,7 +437,7 @@ export function TeacherParticleCanvas({
         for (let i = 0; i < gridSizeY; i++) {
           const idx = i * gridSizeX + j;
           const level = luminanceData[idx];
-          const texture = getCachedTexture(level, brushLayers[level]);
+          const texture = getCachedTexture(level, brushLayers[level], circularBrush);
           texturesRef.current.push(texture);
 
           const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -497,7 +519,7 @@ export function TeacherParticleCanvas({
             // Two separate meshes
             for (const [jj, lvl] of [[j0, level00], [j0 + 1, level10]] as const) {
               const idx = i * gridSizeX + jj;
-              const texture = getCachedTexture(lvl, brushLayers[lvl]);
+              const texture = getCachedTexture(lvl, brushLayers[lvl], circularBrush);
               texturesRef.current.push(texture);
 
               const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -527,7 +549,7 @@ export function TeacherParticleCanvas({
           const j = gridSizeX - 1;
           const idx = i * gridSizeX + j;
           const level = luminanceData[idx];
-          const texture = getCachedTexture(level, brushLayers[level]);
+          const texture = getCachedTexture(level, brushLayers[level], circularBrush);
           texturesRef.current.push(texture);
 
           const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -561,7 +583,7 @@ export function TeacherParticleCanvas({
           const level = luminanceData[idx];
 
           // Get brush texture (use cached texture)
-          const texture = getCachedTexture(level, brushLayers[level]);
+          const texture = getCachedTexture(level, brushLayers[level], circularBrush);
 
           // Calculate size with jitter (sizeJitter is 0-100, factor is 1.0-4.0)
           // Only randomly enlarge, never shrink below base size
@@ -613,7 +635,7 @@ export function TeacherParticleCanvas({
 
     // Store cellMeta for jitter updates
     (meshesRef.current as unknown as { cellMeta: typeof cellMeta }).cellMeta = cellMeta;
-  }, [sourceCanvas, gridSizeX, gridSizeY, brushLayers, sizeJitter, rotationJitter, opacityJitter, enableFlip, updateTrigger]);
+  }, [sourceCanvas, gridSizeX, gridSizeY, brushLayers, sizeJitter, rotationJitter, opacityJitter, enableFlip, circularBrush, updateTrigger]);
 
   // Update jitter properties without recreating meshes
   useEffect(() => {

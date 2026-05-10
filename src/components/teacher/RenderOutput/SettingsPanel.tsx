@@ -8,6 +8,7 @@ interface SettingsPanelProps {
   opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
+  circularBrush: boolean;
   canvasBackgroundColor: string;
   onGridSamplingSizeChange: (size: number) => void;
   onSizeJitterChange: (size: number) => void;
@@ -15,6 +16,7 @@ interface SettingsPanelProps {
   onOpacityJitterChange: (opacity: number) => void;
   onEnableFlipChange: (enabled: boolean) => void;
   onEnableMergeOptimizationChange: (enabled: boolean) => void;
+  onCircularBrushChange: (enabled: boolean) => void;
   onCanvasBackgroundColorChange: (color: string) => void;
 }
 
@@ -25,6 +27,7 @@ export function SettingsPanel({
   opacityJitter,
   enableFlip,
   enableMergeOptimization,
+  circularBrush,
   canvasBackgroundColor,
   onGridSamplingSizeChange,
   onSizeJitterChange,
@@ -32,6 +35,7 @@ export function SettingsPanel({
   onOpacityJitterChange,
   onEnableFlipChange,
   onEnableMergeOptimizationChange,
+  onCircularBrushChange,
   onCanvasBackgroundColorChange,
 }: SettingsPanelProps) {
   return (
@@ -121,6 +125,15 @@ export function SettingsPanel({
             className="w-3 h-3 rounded border-zinc-600"
           />
           <span>笔触合并优化</span>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={circularBrush}
+            onChange={(e) => onCircularBrushChange(e.target.checked)}
+            className="w-3 h-3 rounded border-zinc-600"
+          />
+          <span>圆形笔刷</span>
         </label>
 
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">

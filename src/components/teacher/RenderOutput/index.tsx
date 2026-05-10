@@ -23,6 +23,7 @@ interface RenderOutputPanelProps {
   opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
+  circularBrush: boolean;
   canvasBackgroundColor: string;
   gridSamplingSize: number;
   setGridSamplingSize: (v: number) => void;
@@ -31,6 +32,7 @@ interface RenderOutputPanelProps {
   setOpacityJitter: (v: number) => void;
   setEnableFlip: (v: boolean) => void;
   setEnableMergeOptimization: (v: boolean) => void;
+  setCircularBrush: (v: boolean) => void;
   setCanvasBackgroundColor: (v: string) => void;
   renderTrigger: number;
   outputCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -68,6 +70,7 @@ export function RenderOutputPanel({
   opacityJitter,
   enableFlip,
   enableMergeOptimization,
+  circularBrush,
   canvasBackgroundColor,
   gridSamplingSize,
   setGridSamplingSize,
@@ -76,6 +79,7 @@ export function RenderOutputPanel({
   setOpacityJitter,
   setEnableFlip,
   setEnableMergeOptimization,
+  setCircularBrush,
   setCanvasBackgroundColor,
   renderTrigger,
   outputCanvasRef,
@@ -171,6 +175,7 @@ export function RenderOutputPanel({
               opacityJitter={opacityJitter}
               enableFlip={enableFlip}
               enableMergeOptimization={enableMergeOptimization}
+              circularBrush={circularBrush}
               backgroundColor={canvasBackgroundColor}
               isFullscreen={isFullscreen}
               transform={transform}
@@ -290,6 +295,15 @@ export function RenderOutputPanel({
                       className="w-3 h-3 rounded border-zinc-600"
                     />
                     <span>笔触合并优化</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={circularBrush}
+                      onChange={(e) => setCircularBrush(e.target.checked)}
+                      className="w-3 h-3 rounded border-zinc-600"
+                    />
+                    <span>圆形笔刷</span>
                   </label>
 
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-700">

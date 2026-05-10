@@ -21,6 +21,7 @@ interface DataSourcePanelProps {
   opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
+  circularBrush: boolean;
   canvasBackgroundColor: string;
   onGridSamplingSizeChange: (size: number) => void;
   onSizeJitterChange: (size: number) => void;
@@ -28,6 +29,7 @@ interface DataSourcePanelProps {
   onOpacityJitterChange: (opacity: number) => void;
   onEnableFlipChange: (enabled: boolean) => void;
   onEnableMergeOptimizationChange: (enabled: boolean) => void;
+  onCircularBrushChange: (enabled: boolean) => void;
   onCanvasBackgroundColorChange: (color: string) => void;
 }
 
@@ -48,6 +50,7 @@ export function DataSourcePanel({
   opacityJitter,
   enableFlip,
   enableMergeOptimization,
+  circularBrush,
   canvasBackgroundColor,
   onGridSamplingSizeChange,
   onSizeJitterChange,
@@ -55,6 +58,7 @@ export function DataSourcePanel({
   onOpacityJitterChange,
   onEnableFlipChange,
   onEnableMergeOptimizationChange,
+  onCircularBrushChange,
   onCanvasBackgroundColorChange,
 }: DataSourcePanelProps) {
   return (
@@ -114,6 +118,7 @@ export function DataSourcePanel({
         opacityJitter={opacityJitter}
         enableFlip={enableFlip}
         enableMergeOptimization={enableMergeOptimization}
+        circularBrush={circularBrush}
         canvasBackgroundColor={canvasBackgroundColor}
         onGridSamplingSizeChange={onGridSamplingSizeChange}
         onSizeJitterChange={onSizeJitterChange}
@@ -121,6 +126,7 @@ export function DataSourcePanel({
         onOpacityJitterChange={onOpacityJitterChange}
         onEnableFlipChange={onEnableFlipChange}
         onEnableMergeOptimizationChange={onEnableMergeOptimizationChange}
+        onCircularBrushChange={onCircularBrushChange}
         onCanvasBackgroundColorChange={onCanvasBackgroundColorChange}
       />
     </div>
