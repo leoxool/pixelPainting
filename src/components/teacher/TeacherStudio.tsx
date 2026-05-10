@@ -1672,6 +1672,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
               // We can't restore from ImageData easily, so just keep the reference
               // The user will need to reload the image if they want to continue
             }
+            // Stop render loop and webcam when leaving render stage
+            stopWebcam();
           }
           onStageChange(e.key === '1' ? 'single' : 'group');
           break;
@@ -1718,7 +1720,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onStageChange, currentStage, dataSource]);
+  }, [onStageChange, currentStage, dataSource, stopWebcam]);
 
   // Handle render stage restoration when switching back
   useEffect(() => {
