@@ -18,6 +18,7 @@ export function TeacherParticleCanvas({
   sourceCanvas,
   sizeJitter,
   rotationJitter,
+  opacityJitter,
   enableFlip,
   enableMergeOptimization,
   backgroundColor,
@@ -37,6 +38,7 @@ export function TeacherParticleCanvas({
   sourceCanvas: HTMLCanvasElement | null;
   sizeJitter: number;
   rotationJitter: number;
+  opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
   backgroundColor?: string;
@@ -347,10 +349,12 @@ export function TeacherParticleCanvas({
 
             const mergedSize = BRUSH_TEXTURE_SIZE * 2;
             const geometry = new THREE.PlaneGeometry(mergedSize, mergedSize);
+            const randOpacity = hash(j0, i0, 5);
+            const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
             const material = new THREE.MeshBasicMaterial({
               map: texture,
               transparent: true,
-              opacity: 1.0,
+              opacity,
             });
             const mesh = new THREE.Mesh(geometry, material);
 
@@ -382,10 +386,12 @@ export function TeacherParticleCanvas({
               texturesRef.current.push(texture);
 
               const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
+              const randOpacity = hash(j, i, 5);
+              const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
               const material = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 1.0,
+                opacity,
               });
               const mesh = new THREE.Mesh(geometry, material);
 
@@ -413,10 +419,12 @@ export function TeacherParticleCanvas({
           texturesRef.current.push(texture);
 
           const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
+          const randOpacity = hash(j, i, 5);
+          const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
           const material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
-            opacity: 1.0,
+            opacity,
           });
           const mesh = new THREE.Mesh(geometry, material);
 
@@ -466,10 +474,12 @@ export function TeacherParticleCanvas({
 
             const mergedSize = BRUSH_TEXTURE_SIZE * 2;
             const geometry = new THREE.PlaneGeometry(mergedSize, BRUSH_TEXTURE_SIZE);
+            const randOpacity = hash(j0, i, 5);
+            const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
             const material = new THREE.MeshBasicMaterial({
               map: texture,
               transparent: true,
-              opacity: 1.0,
+              opacity,
             });
             const mesh = new THREE.Mesh(geometry, material);
 
@@ -491,10 +501,12 @@ export function TeacherParticleCanvas({
               texturesRef.current.push(texture);
 
               const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
+              const randOpacity = hash(jj, i, 5);
+              const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
               const material = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 1.0,
+                opacity,
               });
               const mesh = new THREE.Mesh(geometry, material);
 
@@ -519,10 +531,12 @@ export function TeacherParticleCanvas({
           texturesRef.current.push(texture);
 
           const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
+          const randOpacity = hash(j, i, 5);
+          const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
           const material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
-            opacity: 1.0,
+            opacity,
           });
           const mesh = new THREE.Mesh(geometry, material);
 
@@ -565,12 +579,16 @@ export function TeacherParticleCanvas({
           const randFlip = hash(j, i, 3);
           const flip = enableFlip && randFlip > 0.5;
 
+          // Calculate opacity with jitter (opacityJitter 0-100 maps to 1.0 to 0.3)
+          const randOpacity = hash(j, i, 5);
+          const opacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
+
           // Create mesh
           const geometry = new THREE.PlaneGeometry(size, size);
           const material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
-            opacity: 1.0,
+            opacity,
           });
           const mesh = new THREE.Mesh(geometry, material);
 
@@ -595,7 +613,7 @@ export function TeacherParticleCanvas({
 
     // Store cellMeta for jitter updates
     (meshesRef.current as unknown as { cellMeta: typeof cellMeta }).cellMeta = cellMeta;
-  }, [sourceCanvas, gridSizeX, gridSizeY, brushLayers, sizeJitter, rotationJitter, enableFlip, updateTrigger]);
+  }, [sourceCanvas, gridSizeX, gridSizeY, brushLayers, sizeJitter, rotationJitter, opacityJitter, enableFlip, updateTrigger]);
 
   // Update jitter properties without recreating meshes
   useEffect(() => {
@@ -637,6 +655,13 @@ export function TeacherParticleCanvas({
           mesh.geometry = new THREE.PlaneGeometry(size, size);
           mesh.rotation.z = rotation;
           mesh.scale.x = flip ? -1 : 1;
+
+          // Update opacity jitter
+          const randOpacity = hash(meta.baseJ, meta.baseI, 5);
+          const meshOpacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
+          if (mesh.material instanceof THREE.MeshBasicMaterial) {
+            mesh.material.opacity = meshOpacity;
+          }
         } else {
           // Single cell mesh - use baseJ from meta (j is not in scope here)
           const k = sizeJitter / 100;
@@ -655,6 +680,13 @@ export function TeacherParticleCanvas({
           mesh.geometry = new THREE.PlaneGeometry(size, size);
           mesh.rotation.z = rotation;
           mesh.scale.x = flip ? -1 : 1;
+
+          // Update opacity jitter
+          const randOpacity = hash(meta.baseJ, meta.baseI, 5);
+          const meshOpacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
+          if (mesh.material instanceof THREE.MeshBasicMaterial) {
+            mesh.material.opacity = meshOpacity;
+          }
         }
       }
     } else {
@@ -686,10 +718,17 @@ export function TeacherParticleCanvas({
           mesh.geometry = new THREE.PlaneGeometry(size, size);
           mesh.rotation.z = rotation;
           mesh.scale.x = flip ? -1 : 1;
+
+          // Update opacity jitter
+          const randOpacity = hash(j, i, 5);
+          const meshOpacity = 1.0 - randOpacity * (opacityJitter / 100) * 0.7;
+          if (mesh.material instanceof THREE.MeshBasicMaterial) {
+            mesh.material.opacity = meshOpacity;
+          }
         }
       }
     }
-  }, [sizeJitter, rotationJitter, enableFlip, gridSizeX, gridSizeY]);
+  }, [sizeJitter, rotationJitter, opacityJitter, enableFlip, gridSizeX, gridSizeY]);
 
   // Mouse event handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

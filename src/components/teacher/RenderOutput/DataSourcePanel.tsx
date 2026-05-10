@@ -18,12 +18,14 @@ interface DataSourcePanelProps {
   gridSamplingSize: number;
   sizeJitter: number;
   rotationJitter: number;
+  opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
   canvasBackgroundColor: string;
   onGridSamplingSizeChange: (size: number) => void;
   onSizeJitterChange: (size: number) => void;
   onRotationJitterChange: (rotation: number) => void;
+  onOpacityJitterChange: (opacity: number) => void;
   onEnableFlipChange: (enabled: boolean) => void;
   onEnableMergeOptimizationChange: (enabled: boolean) => void;
   onCanvasBackgroundColorChange: (color: string) => void;
@@ -43,12 +45,14 @@ export function DataSourcePanel({
   gridSamplingSize,
   sizeJitter,
   rotationJitter,
+  opacityJitter,
   enableFlip,
   enableMergeOptimization,
   canvasBackgroundColor,
   onGridSamplingSizeChange,
   onSizeJitterChange,
   onRotationJitterChange,
+  onOpacityJitterChange,
   onEnableFlipChange,
   onEnableMergeOptimizationChange,
   onCanvasBackgroundColorChange,
@@ -107,12 +111,14 @@ export function DataSourcePanel({
         gridSamplingSize={gridSamplingSize}
         sizeJitter={sizeJitter}
         rotationJitter={rotationJitter}
+        opacityJitter={opacityJitter}
         enableFlip={enableFlip}
         enableMergeOptimization={enableMergeOptimization}
         canvasBackgroundColor={canvasBackgroundColor}
         onGridSamplingSizeChange={onGridSamplingSizeChange}
         onSizeJitterChange={onSizeJitterChange}
         onRotationJitterChange={onRotationJitterChange}
+        onOpacityJitterChange={onOpacityJitterChange}
         onEnableFlipChange={onEnableFlipChange}
         onEnableMergeOptimizationChange={onEnableMergeOptimizationChange}
         onCanvasBackgroundColorChange={onCanvasBackgroundColorChange}

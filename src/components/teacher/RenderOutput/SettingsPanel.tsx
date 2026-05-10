@@ -5,12 +5,14 @@ interface SettingsPanelProps {
   gridSamplingSize: number;
   sizeJitter: number;
   rotationJitter: number;
+  opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
   canvasBackgroundColor: string;
   onGridSamplingSizeChange: (size: number) => void;
   onSizeJitterChange: (size: number) => void;
   onRotationJitterChange: (rotation: number) => void;
+  onOpacityJitterChange: (opacity: number) => void;
   onEnableFlipChange: (enabled: boolean) => void;
   onEnableMergeOptimizationChange: (enabled: boolean) => void;
   onCanvasBackgroundColorChange: (color: string) => void;
@@ -20,12 +22,14 @@ export function SettingsPanel({
   gridSamplingSize,
   sizeJitter,
   rotationJitter,
+  opacityJitter,
   enableFlip,
   enableMergeOptimization,
   canvasBackgroundColor,
   onGridSamplingSizeChange,
   onSizeJitterChange,
   onRotationJitterChange,
+  onOpacityJitterChange,
   onEnableFlipChange,
   onEnableMergeOptimizationChange,
   onCanvasBackgroundColorChange,
@@ -82,6 +86,21 @@ export function SettingsPanel({
             step="1"
             value={rotationJitter}
             onChange={(e) => onRotationJitterChange(Number(e.target.value))}
+            className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-zinc-400 flex justify-between">
+            <span>透明度抖动</span>
+            <span>{opacityJitter}%</span>
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={opacityJitter}
+            onChange={(e) => onOpacityJitterChange(Number(e.target.value))}
             className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
           />
         </div>

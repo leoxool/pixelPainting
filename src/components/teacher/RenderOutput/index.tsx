@@ -20,6 +20,7 @@ interface RenderOutputPanelProps {
   sourceCanvas: HTMLCanvasElement | null;
   sizeJitter: number;
   rotationJitter: number;
+  opacityJitter: number;
   enableFlip: boolean;
   enableMergeOptimization: boolean;
   canvasBackgroundColor: string;
@@ -27,6 +28,7 @@ interface RenderOutputPanelProps {
   setGridSamplingSize: (v: number) => void;
   setSizeJitter: (v: number) => void;
   setRotationJitter: (v: number) => void;
+  setOpacityJitter: (v: number) => void;
   setEnableFlip: (v: boolean) => void;
   setEnableMergeOptimization: (v: boolean) => void;
   setCanvasBackgroundColor: (v: string) => void;
@@ -63,6 +65,7 @@ export function RenderOutputPanel({
   sourceCanvas,
   sizeJitter,
   rotationJitter,
+  opacityJitter,
   enableFlip,
   enableMergeOptimization,
   canvasBackgroundColor,
@@ -70,6 +73,7 @@ export function RenderOutputPanel({
   setGridSamplingSize,
   setSizeJitter,
   setRotationJitter,
+  setOpacityJitter,
   setEnableFlip,
   setEnableMergeOptimization,
   setCanvasBackgroundColor,
@@ -164,6 +168,7 @@ export function RenderOutputPanel({
               sourceCanvas={sourceCanvas}
               sizeJitter={sizeJitter}
               rotationJitter={rotationJitter}
+              opacityJitter={opacityJitter}
               enableFlip={enableFlip}
               enableMergeOptimization={enableMergeOptimization}
               backgroundColor={canvasBackgroundColor}
@@ -250,6 +255,21 @@ export function RenderOutputPanel({
                       step="1"
                       value={rotationJitter}
                       onChange={(e) => setRotationJitter(Number(e.target.value))}
+                      className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 flex justify-between">
+                      <span>透明度抖动</span>
+                      <span>{opacityJitter}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={opacityJitter}
+                      onChange={(e) => setOpacityJitter(Number(e.target.value))}
                       className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer mt-1"
                     />
                   </div>
