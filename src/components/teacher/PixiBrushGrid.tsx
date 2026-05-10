@@ -25,6 +25,10 @@ interface BrushGridProps {
   onBrushSelect?: (brushId: string, isSelected: boolean) => void;
   // Operation mode: 'browse' = double-click enters album, 'edit' = click selects
   mode?: 'browse' | 'edit';
+  // Initial view mode
+  initialViewMode?: ViewMode;
+  // Trigger to enter focused mode (e.g., when user presses 'f')
+  enterFocusedTrigger?: number;
 }
 
 interface BrushMetrics {
@@ -274,6 +278,8 @@ export function PixiBrushGrid({
   selectedBrushIds = [],
   onBrushSelect,
   mode = 'edit',
+  initialViewMode,
+  enterFocusedTrigger,
 }: BrushGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -322,7 +328,7 @@ export function PixiBrushGrid({
 
   const [presetsWithMetrics, setPresetsWithMetrics] = useState<BrushWithMetrics[]>([]);
   const [isReady, setIsReady] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode || 'grid');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const effectVersionRef = useRef(0);
   const sortedPresetsRef = useRef<BrushWithMetrics[]>([]);
@@ -333,6 +339,16 @@ export function PixiBrushGrid({
   useEffect(() => {
     selectedBrushIdsRef.current = selectedBrushIds;
   }, [selectedBrushIds]);
+
+  // Handle enterFocusedTrigger to enter focused mode with first brush selected
+  useEffect(() => {
+    if (enterFocusedTrigger && enterFocusedTrigger > 0) {
+      setSelectedIndex(0);
+      setViewMode('focused');
+      onViewModeChange?.('focused');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enterFocusedTrigger]);
 
   const PADDING = 52;
   const availableWidth = Math.max(containerWidth - PADDING * 2, 100);
@@ -644,6 +660,7 @@ export function PixiBrushGrid({
         setSelectedIndex(prev => Math.min(sortedPresets.length - 1, prev + 1));
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation(); // Prevent bubbling to parent
         setViewMode('grid');
         onViewModeChange?.('grid');
       }

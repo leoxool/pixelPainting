@@ -107,7 +107,12 @@ export function BrushGroupEditor({
   // Selected brush IDs for click-to-select mode
   const [selectedBrushIds, setSelectedBrushIds] = useState<string[]>([]);
   // Operation mode: 'browse' = double-click enters album, 'edit' = click selects
-  const [mode, setMode] = useState<'browse' | 'edit'>('browse');
+  const [mode, setMode] = useState<'browse' | 'edit'>('edit');
+  // Focused mode for album browsing (separate from mode)
+  const [isFocused, setIsFocused] = useState(false);
+  const [enterFocusedTrigger, setEnterFocusedTrigger] = useState(0);
+  // Fullscreen mode when in focused/album view
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const showSlotsPanelRef = useRef(false);
   useEffect(() => {
     showSlotsPanelRef.current = showSlotsPanel;
@@ -309,21 +314,38 @@ export function BrushGroupEditor({
 
   const [windowPosition, setWindowPosition] = useState(getDefaultPosition);
 
-  // Toggle slots panel with 'g' key
+  // Toggle slots panel with 'g' key, 'f' to toggle fullscreen/focused mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key.toLowerCase() === 'g') {
         setShowSlotsPanel(prev => !prev);
+      } else if (e.key.toLowerCase() === 'f') {
+        if (isFullscreen || isFocused) {
+          // Exit fullscreen and focused mode back to edit mode
+          setIsFullscreen(false);
+          setIsFocused(false);
+          setMode('edit');
+        } else {
+          // Enter browse mode, focused view, and fullscreen
+          setMode('browse');
+          setIsFullscreen(true);
+          setEnterFocusedTrigger(prev => prev + 1);
+        }
+      } else if (e.key === 'Escape' && isFocused) {
+        // Exit focused mode but stay in browse mode
+        setIsFocused(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isFocused, isFullscreen]);
 
   return (
     <div className="flex flex-col h-full relative">
       {/* Toolbar - sort buttons on left, mode toggle center, quick select + save on right */}
+      {/* Hidden when in fullscreen mode */}
+      {!isFullscreen && (
       <div className="flex-shrink-0 w-full flex items-center justify-between gap-2 px-4 py-2 border-b border-zinc-700 bg-zinc-800/50 z-10 flex-wrap">
         {/* Sort buttons - LEFT */}
         <div className="flex items-center gap-2">
@@ -450,6 +472,7 @@ export function BrushGroupEditor({
           </button>
         </div>
       </div>
+      )}
 
       {/* Full page Brush Grid - takes remaining space */}
       <div
@@ -471,14 +494,21 @@ export function BrushGroupEditor({
             setIsPointerDragging(false);
           }}
           onViewModeChange={(mode) => {
-            if (mode === 'focused' && showSlotsPanelRef.current) {
-              setShowSlotsPanel(false);
+            if (mode === 'focused') {
+              setIsFocused(true);
+              if (showSlotsPanelRef.current) setShowSlotsPanel(false);
+            } else {
+              // When exiting focused view (via PixiBrushGrid's Escape handler), return to edit mode
+              setIsFocused(false);
+              setMode('edit');
             }
           }}
           onPresetsWithMetricsChange={handlePresetsWithMetricsChange}
           selectedBrushIds={selectedBrushIds}
           onBrushSelect={handleBrushSelect}
           mode={mode}
+          initialViewMode={isFocused ? 'focused' : 'grid'}
+          enterFocusedTrigger={enterFocusedTrigger}
         />
       </div>
 
