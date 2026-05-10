@@ -322,6 +322,9 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
     }
 
     // Also load the brush images to brushLayersRef for rendering
+    // Wait for all images to load before triggering update
+    const loadPromises: Promise<void>[] = [];
+
     group.slots.forEach((slotId, index) => {
       const canvas = brushCanvasesRef.current[index];
       if (!canvas) return;
@@ -329,18 +332,24 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
       if (slotId) {
         // Filled slot - load the actual brush
         const preset = brushPresets.find(p => p.id === slotId);
-        if (!preset || !preset.layers[0]) return;
+        const layerUrl = preset?.layers?.[0];
+        if (!layerUrl) return;
 
-        const img = new Image();
-        img.onload = () => {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
-            ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-            brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
-          }
-        };
-        img.src = preset.layers[0];
+        const promise = new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+              ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+              brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
+            }
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = layerUrl;
+        });
+        loadPromises.push(promise);
       } else {
         // Empty slot - find nearest filled slot and use its brush (interleaved fallback)
         if (filledSlots.length === 0) return;
@@ -358,23 +367,32 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
 
         const nearestSlotId = group.slots[nearestFilledIndex];
         const preset = brushPresets.find(p => p.id === nearestSlotId);
-        if (!preset || !preset.layers[0]) return;
+        const layerUrl = preset?.layers?.[0];
+        if (!layerUrl) return;
 
-        const img = new Image();
-        img.onload = () => {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
-            ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-            brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
-          }
-        };
-        img.src = preset.layers[0];
+        const promise = new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+              ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+              brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
+            }
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = layerUrl;
+        });
+        loadPromises.push(promise);
       }
     });
 
-    setBrushUpdateTrigger(t => t + 1);
-    setRenderTrigger(t => t + 1);
+    // Wait for all images to load before triggering update
+    Promise.all(loadPromises).then(() => {
+      setBrushUpdateTrigger(t => t + 1);
+      setRenderTrigger(t => t + 1);
+    });
   }, [brushPresets]);
 
   // 从条带图导入笔刷（1000x100 切割成 10 个 100x100）
