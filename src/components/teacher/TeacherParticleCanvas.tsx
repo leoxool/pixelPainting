@@ -58,8 +58,14 @@ export function TeacherParticleCanvas({
   const isInitializedRef = useRef(false);
   const [displaySize, setDisplaySize] = useState({ width: 400, height: 400 });
 
-  // Cache luminance data to avoid recalculation
-  const luminanceCacheRef = useRef<Uint8Array | null>(null);
+  // Texture cache: reuse textures across meshes with same level
+  const textureCacheRef = useRef<Map<number, THREE.Texture>>(new Map());
+
+  // Luminance cache: avoid recalculating when source hasn't changed
+  const luminanceCacheRef = useRef<{
+    sourceCanvas: HTMLCanvasElement | null;
+    luminanceData: Uint8Array | null;
+  }>({ sourceCanvas: null, luminanceData: null });
 
   const outputWidth = gridSizeX * BRUSH_TEXTURE_SIZE;
   const outputHeight = gridSizeY * BRUSH_TEXTURE_SIZE;
@@ -68,6 +74,37 @@ export function TeacherParticleCanvas({
   const hash = (x: number, y: number, seed: number = 0): number => {
     return ((Math.sin(x * 127.1 + y * 311.7 + seed) * 43758.5453) % 1 + 1) % 1;
   };
+
+  // Create a placeholder texture for a given level
+  const createPlaceholderTexture = (level: number): THREE.Texture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = BRUSH_TEXTURE_SIZE;
+    canvas.height = BRUSH_TEXTURE_SIZE;
+    const tctx = canvas.getContext('2d');
+    if (tctx) {
+      tctx.fillStyle = level < 5 ? '#000000' : '#ffffff';
+      tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+  };
+
+  // Get or create cached texture for a level
+  const getCachedTexture = useCallback((level: number, brushLayer: BrushLayer | null): THREE.Texture => {
+    if (textureCacheRef.current.has(level)) {
+      return textureCacheRef.current.get(level)!;
+    }
+    let tex: THREE.Texture;
+    if (brushLayer?.canvas) {
+      tex = new THREE.CanvasTexture(brushLayer.canvas);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+    } else {
+      tex = createPlaceholderTexture(level);
+    }
+    textureCacheRef.current.set(level, tex);
+    return tex;
+  }, []);
 
   // Measure container size
   useEffect(() => {
@@ -155,8 +192,12 @@ export function TeacherParticleCanvas({
       return;
     }
 
+    // Clear texture cache entries for levels that will be rebuilt
+    // (cache is keyed by level, so we just clear the whole cache on brushLayers change)
+    textureCacheRef.current.clear();
+
     // Clear luminance cache when grid or source changes
-    luminanceCacheRef.current = null;
+    luminanceCacheRef.current = { sourceCanvas: null, luminanceData: null };
 
     // Clean up old meshes
     meshesRef.current.forEach((mesh) => {
@@ -172,93 +213,102 @@ export function TeacherParticleCanvas({
     texturesRef.current.forEach((tex) => tex.dispose());
     texturesRef.current = [];
 
-    // Get source image data
-    const ctx = sourceCanvas.getContext('2d');
-    if (!ctx) return;
-    const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-    const data = imageData.data;
-
-    // Calculate image draw area within the canvas (same logic as TeacherStudio)
-    // This accounts for how the image is centered on a gray background when aspect ratio differs
-    const sourceAspectRatio = sourceWidth / sourceHeight;
-    let drawWidth, drawHeight;
-    if (sourceAspectRatio >= 1) {
-      drawHeight = sourceCanvas.height;
-      drawWidth = sourceCanvas.height * sourceAspectRatio;
+    // Check luminance cache before doing expensive calculation
+    let luminanceData: Uint8Array;
+    if (luminanceCacheRef.current?.sourceCanvas === sourceCanvas && luminanceCacheRef.current?.luminanceData) {
+      // Cache hit - reuse cached luminance data
+      luminanceData = luminanceCacheRef.current.luminanceData;
     } else {
-      drawWidth = sourceCanvas.width;
-      drawHeight = sourceCanvas.width / sourceAspectRatio;
-    }
-    const drawX = (sourceCanvas.width - drawWidth) / 2;
-    const drawY = (sourceCanvas.height - drawHeight) / 2;
+      // Cache miss - calculate luminance
+      const ctx = sourceCanvas.getContext('2d');
+      if (!ctx) return;
+      const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const data = imageData.data;
 
-    // Pre-calculate luminance for each grid cell
-    const luminanceData = new Uint8Array(gridSizeX * gridSizeY);
-    const cellLuminance: number[] = [];
+      // Calculate image draw area within the canvas (same logic as TeacherStudio)
+      // This accounts for how the image is centered on a gray background when aspect ratio differs
+      const sourceAspectRatio = sourceWidth / sourceHeight;
+      let drawWidth, drawHeight;
+      if (sourceAspectRatio >= 1) {
+        drawHeight = sourceCanvas.height;
+        drawWidth = sourceCanvas.height * sourceAspectRatio;
+      } else {
+        drawWidth = sourceCanvas.width;
+        drawHeight = sourceCanvas.width / sourceAspectRatio;
+      }
+      const drawX = (sourceCanvas.width - drawWidth) / 2;
+      const drawY = (sourceCanvas.height - drawHeight) / 2;
 
-    // First pass: collect luminance values for all cells
-    for (let i = 0; i < gridSizeY; i++) {
-      for (let j = 0; j < gridSizeX; j++) {
-        const idx = i * gridSizeX + j;
+      // Pre-calculate luminance for each grid cell
+      const cellLuminance: number[] = [];
 
-        // Map grid cell to actual image pixel position within canvas
-        const srcX = Math.floor((j / gridSizeX) * drawWidth + drawX);
-        const srcY = Math.floor((i / gridSizeY) * drawHeight + drawY);
-        const srcW = Math.max(1, Math.floor(drawWidth / gridSizeX));
-        const srcH = Math.max(1, Math.floor(drawHeight / gridSizeY));
+      // First pass: collect luminance values for all cells
+      for (let i = 0; i < gridSizeY; i++) {
+        for (let j = 0; j < gridSizeX; j++) {
+          const idx = i * gridSizeX + j;
 
-        let totalLuminance = 0;
-        let pixelCount = 0;
+          // Map grid cell to actual image pixel position within canvas
+          const srcX = Math.floor((j / gridSizeX) * drawWidth + drawX);
+          const srcY = Math.floor((i / gridSizeY) * drawHeight + drawY);
+          const srcW = Math.max(1, Math.floor(drawWidth / gridSizeX));
+          const srcH = Math.max(1, Math.floor(drawHeight / gridSizeY));
 
-        for (let dy = 0; dy < srcH; dy++) {
-          for (let dx = 0; dx < srcW; dx++) {
-            const px = Math.min(srcX + dx, sourceCanvas.width - 1);
-            const py = Math.min(srcY + dy, sourceCanvas.height - 1);
-            const pidx = (py * sourceCanvas.width + px) * 4;
-            const r = data[pidx];
-            const g = data[pidx + 1];
-            const b = data[pidx + 2];
-            totalLuminance += r * 0.2126 + g * 0.7152 + b * 0.0722;
-            pixelCount++;
+          let totalLuminance = 0;
+          let pixelCount = 0;
+
+          for (let dy = 0; dy < srcH; dy++) {
+            for (let dx = 0; dx < srcW; dx++) {
+              const px = Math.min(srcX + dx, sourceCanvas.width - 1);
+              const py = Math.min(srcY + dy, sourceCanvas.height - 1);
+              const pidx = (py * sourceCanvas.width + px) * 4;
+              const r = data[pidx];
+              const g = data[pidx + 1];
+              const b = data[pidx + 2];
+              totalLuminance += r * 0.2126 + g * 0.7152 + b * 0.0722;
+              pixelCount++;
+            }
           }
+
+          const avgLuminance = pixelCount > 0 ? totalLuminance / pixelCount : 128;
+          cellLuminance[idx] = avgLuminance;
         }
-
-        const avgLuminance = pixelCount > 0 ? totalLuminance / pixelCount : 128;
-        cellLuminance[idx] = avgLuminance;
       }
-    }
 
-    // Find min and max luminance across all cells for dynamic mapping
-    let minLuminance = 255;
-    let maxLuminance = 0;
-    for (let i = 0; i < cellLuminance.length; i++) {
-      minLuminance = Math.min(minLuminance, cellLuminance[i]);
-      maxLuminance = Math.max(maxLuminance, cellLuminance[i]);
-    }
+      // Find min and max luminance across all cells for dynamic mapping
+      let minLuminance = 255;
+      let maxLuminance = 0;
+      for (let i = 0; i < cellLuminance.length; i++) {
+        minLuminance = Math.min(minLuminance, cellLuminance[i]);
+        maxLuminance = Math.max(maxLuminance, cellLuminance[i]);
+      }
 
-    // Ensure we have a valid range (avoid division by zero)
-    const luminanceRange = maxLuminance - minLuminance;
+      // Ensure we have a valid range (avoid division by zero)
+      const luminanceRange = maxLuminance - minLuminance;
 
-    // Second pass: map luminance to level using dynamic range
-    const effectiveSlotCount = brushLayers.length || 10;
-    for (let i = 0; i < gridSizeY; i++) {
-      for (let j = 0; j < gridSizeX; j++) {
-        const idx = i * gridSizeX + j;
-        const avgLuminance = cellLuminance[idx];
+      // Second pass: map luminance to level using dynamic range
+      luminanceData = new Uint8Array(gridSizeX * gridSizeY);
+      const effectiveSlotCount = brushLayers.length || 10;
+      for (let i = 0; i < gridSizeY; i++) {
+        for (let j = 0; j < gridSizeX; j++) {
+          const idx = i * gridSizeX + j;
+          const avgLuminance = cellLuminance[idx];
 
-        let level: number;
-        if (luminanceRange === 0) {
-          // All cells have the same luminance - use middle level
-          level = Math.floor(effectiveSlotCount / 2);
-        } else {
-          // Map luminance to level based on actual range
-          level = Math.floor(((avgLuminance - minLuminance) / luminanceRange) * (effectiveSlotCount - 1));
+          let level: number;
+          if (luminanceRange === 0) {
+            // All cells have the same luminance - use middle level
+            level = Math.floor(effectiveSlotCount / 2);
+          } else {
+            // Map luminance to level based on actual range
+            level = Math.floor(((avgLuminance - minLuminance) / luminanceRange) * (effectiveSlotCount - 1));
+          }
+          level = Math.min(effectiveSlotCount - 1, Math.max(0, level));
+          luminanceData[idx] = level;
         }
-        level = Math.min(effectiveSlotCount - 1, Math.max(0, level));
-        luminanceData[idx] = level;
       }
+
+      // Cache the result
+      luminanceCacheRef.current = { sourceCanvas, luminanceData };
     }
-    luminanceCacheRef.current = luminanceData;
 
     // Check if merging can be enabled (requires no jitter or flip)
     const canMerge = enableMergeOptimization && sizeJitter === 0 && rotationJitter === 0 && !enableFlip;
@@ -292,24 +342,7 @@ export function TeacherParticleCanvas({
           if (allSame) {
             // Create merged 2x2 mesh
             const level = level00;
-            const layer = brushLayers[level];
-            let texture: THREE.Texture;
-            if (layer?.canvas) {
-              const tex = new THREE.CanvasTexture(layer.canvas);
-              tex.minFilter = THREE.LinearFilter;
-              tex.magFilter = THREE.LinearFilter;
-              texture = tex;
-            } else {
-              const canvas = document.createElement('canvas');
-              canvas.width = BRUSH_TEXTURE_SIZE;
-              canvas.height = BRUSH_TEXTURE_SIZE;
-              const tctx = canvas.getContext('2d');
-              if (tctx) {
-                tctx.fillStyle = level < 5 ? '#000000' : '#ffffff';
-                tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
-              }
-              texture = new THREE.CanvasTexture(canvas);
-            }
+            const texture = getCachedTexture(level, brushLayers[level]);
             texturesRef.current.push(texture);
 
             const mergedSize = BRUSH_TEXTURE_SIZE * 2;
@@ -345,24 +378,7 @@ export function TeacherParticleCanvas({
             ];
             for (const [i, j, level] of positions) {
               const idx = i * gridSizeX + j;
-              const layer = brushLayers[level];
-              let texture: THREE.Texture;
-              if (layer?.canvas) {
-                const tex = new THREE.CanvasTexture(layer.canvas);
-                tex.minFilter = THREE.LinearFilter;
-                tex.magFilter = THREE.LinearFilter;
-                texture = tex;
-              } else {
-                const canvas = document.createElement('canvas');
-                canvas.width = BRUSH_TEXTURE_SIZE;
-                canvas.height = BRUSH_TEXTURE_SIZE;
-                const tctx = canvas.getContext('2d');
-                if (tctx) {
-                  tctx.fillStyle = level < 5 ? '#000000' : '#ffffff';
-                  tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
-                }
-                texture = new THREE.CanvasTexture(canvas);
-              }
+              const texture = getCachedTexture(level, brushLayers[level]);
               texturesRef.current.push(texture);
 
               const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -393,24 +409,7 @@ export function TeacherParticleCanvas({
         for (let i = 0; i < gridSizeY; i++) {
           const idx = i * gridSizeX + j;
           const level = luminanceData[idx];
-          const layer = brushLayers[level];
-          let texture: THREE.Texture;
-          if (layer?.canvas) {
-            const tex = new THREE.CanvasTexture(layer.canvas);
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            texture = tex;
-          } else {
-            const canvas = document.createElement('canvas');
-            canvas.width = BRUSH_TEXTURE_SIZE;
-            canvas.height = BRUSH_TEXTURE_SIZE;
-            const tctx = canvas.getContext('2d');
-            if (tctx) {
-              tctx.fillStyle = level < 5 ? '#000000' : '#ffffff';
-              tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
-            }
-            texture = new THREE.CanvasTexture(canvas);
-          }
+          const texture = getCachedTexture(level, brushLayers[level]);
           texturesRef.current.push(texture);
 
           const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -488,24 +487,7 @@ export function TeacherParticleCanvas({
             // Two separate meshes
             for (const [jj, lvl] of [[j0, level00], [j0 + 1, level10]] as const) {
               const idx = i * gridSizeX + jj;
-              const layer = brushLayers[lvl];
-              let texture: THREE.Texture;
-              if (layer?.canvas) {
-                const tex = new THREE.CanvasTexture(layer.canvas);
-                tex.minFilter = THREE.LinearFilter;
-                tex.magFilter = THREE.LinearFilter;
-                texture = tex;
-              } else {
-                const canvas = document.createElement('canvas');
-                canvas.width = BRUSH_TEXTURE_SIZE;
-                canvas.height = BRUSH_TEXTURE_SIZE;
-                const tctx = canvas.getContext('2d');
-                if (tctx) {
-                  tctx.fillStyle = lvl < 5 ? '#000000' : '#ffffff';
-                  tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
-                }
-                texture = new THREE.CanvasTexture(canvas);
-              }
+              const texture = getCachedTexture(lvl, brushLayers[lvl]);
               texturesRef.current.push(texture);
 
               const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -533,24 +515,7 @@ export function TeacherParticleCanvas({
           const j = gridSizeX - 1;
           const idx = i * gridSizeX + j;
           const level = luminanceData[idx];
-          const layer = brushLayers[level];
-          let texture: THREE.Texture;
-          if (layer?.canvas) {
-            const tex = new THREE.CanvasTexture(layer.canvas);
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            texture = tex;
-          } else {
-            const canvas = document.createElement('canvas');
-            canvas.width = BRUSH_TEXTURE_SIZE;
-            canvas.height = BRUSH_TEXTURE_SIZE;
-            const tctx = canvas.getContext('2d');
-            if (tctx) {
-              tctx.fillStyle = level < 5 ? '#000000' : '#ffffff';
-              tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
-            }
-            texture = new THREE.CanvasTexture(canvas);
-          }
+          const texture = getCachedTexture(level, brushLayers[level]);
           texturesRef.current.push(texture);
 
           const geometry = new THREE.PlaneGeometry(BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
@@ -581,29 +546,8 @@ export function TeacherParticleCanvas({
           const idx = i * gridSizeX + j;
           const level = luminanceData[idx];
 
-          // Get brush texture
-          const layer = brushLayers[level];
-          let texture: THREE.Texture;
-          if (layer?.canvas) {
-            const tex = new THREE.CanvasTexture(layer.canvas);
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            texturesRef.current[idx] = tex;
-            texture = tex;
-          } else {
-            // Placeholder - black for dark levels, white for light
-            const canvas = document.createElement('canvas');
-            canvas.width = BRUSH_TEXTURE_SIZE;
-            canvas.height = BRUSH_TEXTURE_SIZE;
-            const tctx = canvas.getContext('2d');
-            if (tctx) {
-              tctx.fillStyle = level < 5 ? '#000000' : '#ffffff';
-              tctx.fillRect(0, 0, BRUSH_TEXTURE_SIZE, BRUSH_TEXTURE_SIZE);
-            }
-            const tex = new THREE.CanvasTexture(canvas);
-            texturesRef.current[idx] = tex;
-            texture = tex;
-          }
+          // Get brush texture (use cached texture)
+          const texture = getCachedTexture(level, brushLayers[level]);
 
           // Calculate size with jitter (sizeJitter is 0-100, factor is 0.25-4.0)
           const k = sizeJitter / 100; // 0-1

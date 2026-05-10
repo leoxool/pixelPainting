@@ -637,15 +637,21 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
 
   const startRenderLoop = useCallback(() => {
     renderLoopRef.current = true;
+    let frameCount = 0;
     const loop = () => {
       if (!renderLoopRef.current) return;
+      frameCount++;
+
       const video = videoRef.current;
       const sourceCanvas = sourceCanvasRef.current;
       const sourceCtx = sourceCtxRef.current;
-      if (video && sourceCanvas && sourceCtx && isWebcamActiveRef.current) {
+
+      // Throttle webcam updates to every 3 frames to reduce CPU load
+      if (frameCount % 3 === 0 && video && sourceCanvas && sourceCtx && isWebcamActiveRef.current) {
         sourceCtx.drawImage(video, 0, 0, SOURCE_WIDTH, SOURCE_HEIGHT);
       }
-      // Trigger WebGL texture update
+
+      // Trigger WebGL texture update every frame to maintain smooth rendering
       setRenderTrigger(t => t + 1);
       animationFrameRef.current = requestAnimationFrame(loop);
     };
