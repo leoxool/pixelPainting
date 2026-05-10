@@ -23,7 +23,7 @@ export interface BrushGroup {
   id: string;
   name: string;
   timestamp: number;
-  slots: (string | null)[];  // 10个笔刷preset ID，对应灰度级0-9
+  slots: (string | null)[];  // 动态长度，每个元素是 BrushPreset ID
 }
 
 export interface GridCell {

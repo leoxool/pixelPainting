@@ -194,6 +194,9 @@ export function TeacherParticleCanvas({
 
     // Pre-calculate luminance for each grid cell
     const luminanceData = new Uint8Array(gridSizeX * gridSizeY);
+    const cellLuminance: number[] = [];
+
+    // First pass: collect luminance values for all cells
     for (let i = 0; i < gridSizeY; i++) {
       for (let j = 0; j < gridSizeX; j++) {
         const idx = i * gridSizeX + j;
@@ -221,7 +224,37 @@ export function TeacherParticleCanvas({
         }
 
         const avgLuminance = pixelCount > 0 ? totalLuminance / pixelCount : 128;
-        const level = Math.min(9, Math.max(0, Math.floor((avgLuminance / 255) * 10)));
+        cellLuminance[idx] = avgLuminance;
+      }
+    }
+
+    // Find min and max luminance across all cells for dynamic mapping
+    let minLuminance = 255;
+    let maxLuminance = 0;
+    for (let i = 0; i < cellLuminance.length; i++) {
+      minLuminance = Math.min(minLuminance, cellLuminance[i]);
+      maxLuminance = Math.max(maxLuminance, cellLuminance[i]);
+    }
+
+    // Ensure we have a valid range (avoid division by zero)
+    const luminanceRange = maxLuminance - minLuminance;
+
+    // Second pass: map luminance to level using dynamic range
+    const effectiveSlotCount = brushLayers.length || 10;
+    for (let i = 0; i < gridSizeY; i++) {
+      for (let j = 0; j < gridSizeX; j++) {
+        const idx = i * gridSizeX + j;
+        const avgLuminance = cellLuminance[idx];
+
+        let level: number;
+        if (luminanceRange === 0) {
+          // All cells have the same luminance - use middle level
+          level = Math.floor(effectiveSlotCount / 2);
+        } else {
+          // Map luminance to level based on actual range
+          level = Math.floor(((avgLuminance - minLuminance) / luminanceRange) * (effectiveSlotCount - 1));
+        }
+        level = Math.min(effectiveSlotCount - 1, Math.max(0, level));
         luminanceData[idx] = level;
       }
     }

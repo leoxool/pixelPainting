@@ -7,6 +7,74 @@ import { PixiBrushGrid } from './PixiBrushGrid';
 import { FloatingWindow } from './FloatingWindow';
 import { getBrushGroups, saveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 
+// Brush metrics interfaces (same as PixiBrushGrid)
+interface BrushMetrics {
+  brightness: number;
+  saturation: number;
+  hue: number;
+}
+
+interface BrushWithMetrics extends BrushPreset {
+  metrics?: BrushMetrics;
+}
+
+// Calculate brightness from RGB (luma)
+function calculateBrightnessFromRgb(r: number, g: number, b: number): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+// Calculate hue from RGB (0-360)
+function calculateHueFromRgb(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return 0;
+  let hue = 0;
+  if (max === r) {
+    hue = ((g - b) / delta) % 6;
+  } else if (max === g) {
+    hue = (b - r) / delta + 2;
+  } else {
+    hue = (r - g) / delta + 4;
+  }
+  hue *= 60;
+  if (hue < 0) hue += 360;
+  return hue;
+}
+
+// Calculate saturation from RGB (0-1)
+function calculateSaturationFromRgb(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === 0) return 0;
+  return (max - min) / max;
+}
+
+// Calculate brush metrics from layer data
+function calculateBrushMetricsSync(preset: BrushPreset): BrushMetrics {
+  const layerData = preset.layers[0];
+  if (!layerData) {
+    return { brightness: 128, saturation: 0, hue: 0 };
+  }
+
+  // Create a promise-based approach but resolve synchronously using a canvas
+  const img = new Image();
+  img.src = layerData;
+
+  // Since we can't load synchronously, return default and let the async version in PixiBrushGrid handle it
+  // For quick selection, we'll use a simplified approach based on the color
+  return { brightness: 128, saturation: 0, hue: 0 };
+}
+
+// Color range definitions
+const HUE_RANGES = {
+  '蓝紫': { min: 220, max: 300 },
+  '红橙': { min: 0, max: 60 },
+  '黄绿': { min: 60, max: 150 },
+} as const;
+
+const SATURATION_THRESHOLD = 0.25;
+
 interface BrushGroupEditorProps {
   brushPresets: BrushPreset[];
   slots: (BrushPreset | null)[];
@@ -35,6 +103,11 @@ export function BrushGroupEditor({
   const [savedGroups, setSavedGroups] = useState<BrushGroup[]>([]);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [showSlotsPanel, setShowSlotsPanel] = useState(false);
+  const [presetsWithMetrics, setPresetsWithMetrics] = useState<BrushWithMetrics[]>([]);
+  // Selected brush IDs for click-to-select mode
+  const [selectedBrushIds, setSelectedBrushIds] = useState<string[]>([]);
+  // Operation mode: 'browse' = double-click enters album, 'edit' = click selects
+  const [mode, setMode] = useState<'browse' | 'edit'>('browse');
   const showSlotsPanelRef = useRef(false);
   useEffect(() => {
     showSlotsPanelRef.current = showSlotsPanel;
@@ -48,6 +121,26 @@ export function BrushGroupEditor({
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [gridWidth, setGridWidth] = useState(800);
   const [gridHeight, setGridHeight] = useState(600);
+
+  // Handle presets with metrics update from PixiBrushGrid
+  const handlePresetsWithMetricsChange = useCallback((metrics: BrushWithMetrics[]) => {
+    setPresetsWithMetrics(metrics);
+  }, []);
+
+  // Handle brush selection (click to select)
+  const handleBrushSelect = useCallback((brushId: string, isSelected: boolean) => {
+    setSelectedBrushIds(prev => {
+      if (isSelected) {
+        return [...prev, brushId];
+      } else {
+        return prev.filter(id => id !== brushId);
+      }
+    });
+  }, []);
+
+  // Dynamic slot count based on filled slots (min 5, max based on actual)
+  const filledSlots = slots.filter(s => s !== null).length;
+  const effectiveSlotCount = Math.max(5, filledSlots);
 
   // Load brush groups from IndexedDB
   const loadGroups = useCallback(async () => {
@@ -201,8 +294,7 @@ export function BrushGroupEditor({
     }
   }, []);
 
-  const filledSlots = slots.filter(s => s !== null).length;
-  const canSave = filledSlots === 10;
+  const canSave = filledSlots >= 5;
 
   // Position floating window at bottom center by default
   const getDefaultPosition = () => {
@@ -231,22 +323,132 @@ export function BrushGroupEditor({
 
   return (
     <div className="flex flex-col h-full relative">
-      {/* Sort controls - displayed at page top */}
-      <div className="flex-shrink-0 w-full flex items-center gap-2 px-4 py-2 border-b border-zinc-700 bg-zinc-800/50 z-10">
-        <span className="text-xs text-zinc-400">排序:</span>
-        {(['time', 'brightness', 'saturation', 'hue'] as SortRule[]).map((rule) => (
+      {/* Toolbar - sort buttons on left, mode toggle center, quick select + save on right */}
+      <div className="flex-shrink-0 w-full flex items-center justify-between gap-2 px-4 py-2 border-b border-zinc-700 bg-zinc-800/50 z-10 flex-wrap">
+        {/* Sort buttons - LEFT */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-400">排序:</span>
+          {(['time', 'brightness', 'saturation', 'hue'] as SortRule[]).map((rule) => (
+            <button
+              key={rule}
+              onClick={() => setSortRule(rule)}
+              className={`px-2 py-1 rounded text-xs ${
+                sortRule === rule
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+              }`}
+            >
+              {rule === 'time' ? '时间' : rule === 'brightness' ? '亮度' : rule === 'saturation' ? '饱和度' : '色相'}
+            </button>
+          ))}
+        </div>
+
+        {/* Mode toggle - CENTER */}
+        <div className="flex items-center gap-1 bg-zinc-900 rounded p-0.5">
           <button
-            key={rule}
-            onClick={() => setSortRule(rule)}
-            className={`px-2 py-1 rounded text-xs ${
-              sortRule === rule
+            onClick={() => setMode('browse')}
+            className={`px-3 py-1 rounded text-xs transition-colors ${
+              mode === 'browse'
                 ? 'bg-blue-600 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+            }`}
+          >
+            浏览
+          </button>
+          <button
+            onClick={() => setMode('edit')}
+            className={`px-3 py-1 rounded text-xs transition-colors ${
+              mode === 'edit'
+                ? 'bg-blue-600 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+            }`}
+          >
+            编辑
+          </button>
+        </div>
+
+        {/* Quick selection + Save buttons - RIGHT (disabled in browse mode) */}
+        <div className="flex items-center gap-2">
+          {/* Quick selection tags */}
+          <button
+            onClick={() => {
+              // Select all visible brushes
+              const allIds = presetsWithMetrics.map(p => p.id);
+              setSelectedBrushIds(allIds);
+            }}
+            disabled={mode === 'browse'}
+            className={`px-2 py-1 rounded text-xs ${
+              mode === 'browse'
+                ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
                 : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
             }`}
           >
-            {rule === 'time' ? '时间' : rule === 'brightness' ? '亮度' : rule === 'saturation' ? '饱和度' : '色相'}
+            全选
           </button>
-        ))}
+          <button
+            onClick={() => setSelectedBrushIds([])}
+            disabled={mode === 'browse'}
+            className={`px-2 py-1 rounded text-xs ${
+              mode === 'browse'
+                ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+            }`}
+          >
+            清空
+          </button>
+          <div className="w-px h-5 bg-zinc-600 mx-1" />
+          {/* Brush group library button */}
+          <button
+            onClick={() => setShowLibraryModal(true)}
+            disabled={mode === 'browse'}
+            className={`px-2 py-1 rounded text-xs ${
+              mode === 'browse'
+                ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+            }`}
+          >
+            笔刷组库
+          </button>
+          {/* Save to brush group library */}
+          <button
+            onClick={async () => {
+              if (selectedBrushIds.length < 5) {
+                alert(`请至少选择5个笔刷（当前已选 ${selectedBrushIds.length} 个）`);
+                return;
+              }
+              // Sort selected brushes by brightness (ascending - darkest first)
+              const selectedPresets = presetsWithMetrics
+                .filter(p => selectedBrushIds.includes(p.id))
+                .sort((a, b) => (a.metrics?.brightness ?? 128) - (b.metrics?.brightness ?? 128));
+
+              // Create brush group
+              const groupName = `笔刷组_${Date.now()}`;
+              const group: BrushGroup = {
+                id: Date.now().toString(),
+                name: groupName,
+                timestamp: Date.now(),
+                slots: selectedPresets.map(p => p.id),
+              };
+
+              // Save to IndexedDB
+              const existing = await getBrushGroups();
+              await saveBrushGroups([...existing, group]);
+              setSavedGroups(prev => [...prev, group]);
+              setSelectedBrushIds([]);
+              alert('笔刷组已保存到库中！');
+            }}
+            disabled={mode === 'browse' || selectedBrushIds.length < 5}
+            className={`px-3 py-1 rounded text-xs font-medium ${
+              mode === 'browse'
+                ? 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+                : selectedBrushIds.length >= 5
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                  : 'bg-zinc-600 text-zinc-400 cursor-not-allowed'
+            }`}
+          >
+            保存到笔刷组库 ({selectedBrushIds.length})
+          </button>
+        </div>
       </div>
 
       {/* Full page Brush Grid - takes remaining space */}
@@ -273,6 +475,10 @@ export function BrushGroupEditor({
               setShowSlotsPanel(false);
             }
           }}
+          onPresetsWithMetricsChange={handlePresetsWithMetricsChange}
+          selectedBrushIds={selectedBrushIds}
+          onBrushSelect={handleBrushSelect}
+          mode={mode}
         />
       </div>
 
@@ -289,7 +495,7 @@ export function BrushGroupEditor({
           {/* Slots panel content with close button */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-sm font-medium">笔刷组 ({filledSlots}/10)</div>
+              <div className="text-sm font-medium">笔刷组 ({filledSlots}/{effectiveSlotCount})</div>
               <button
                 onClick={() => setShowLibraryModal(true)}
                 className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-zinc-300"
@@ -330,12 +536,13 @@ export function BrushGroupEditor({
               </svg>
             </button>
           </div>
-          {/* 10 slots horizontally */}
+          {/* Dynamic slots horizontally */}
           <div className="flex justify-center gap-2">
             {slots.map((preset, index) => (
               <BrushGroupSlot
                 key={index}
                 slotIndex={index}
+                slotCount={effectiveSlotCount}
                 brushPreset={preset}
                 onSlotClick={onSlotClick}
                 onDragOver={handleDragOver}
@@ -389,33 +596,33 @@ export function BrushGroupEditor({
                         setShowLibraryModal(false);
                       }}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium">{group.name}</div>
+                      <div className="flex items-center gap-3">
+                        {/* Show first brush thumbnail */}
+                        <div className="w-12 h-12 bg-zinc-600 rounded border border-zinc-500 overflow-hidden shrink-0">
+                          {(() => {
+                            const firstSlotId = group.slots.find(id => id !== null);
+                            const preset = firstSlotId ? brushPresets.find(p => p.id === firstSlotId) : null;
+                            const layerData = preset?.layers[0];
+                            return layerData ? (
+                              <img src={layerData} alt="" className="w-full h-full object-contain" />
+                            ) : null;
+                          })()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{group.name}</div>
+                          <div className="text-xs text-zinc-400 mt-1">
+                            {group.slots.filter(id => id !== null).length} 个笔刷
+                          </div>
+                        </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteGroup(group.id);
                           }}
-                          className="text-xs text-red-400 hover:text-red-300"
+                          className="text-xs text-red-400 hover:text-red-300 shrink-0"
                         >
                           删除
                         </button>
-                      </div>
-                      <div className="flex gap-1 mt-2">
-                        {group.slots.map((slotId, i) => {
-                          const preset = brushPresets.find(p => p.id === slotId);
-                          const layerData = preset?.layers[0];
-                          return (
-                            <div
-                              key={i}
-                              className="w-6 h-6 bg-zinc-600 rounded border border-zinc-500 overflow-hidden"
-                            >
-                              {layerData && (
-                                <img src={layerData} alt="" className="w-full h-full object-contain" />
-                              )}
-                            </div>
-                          );
-                        })}
                       </div>
                     </div>
                   ))}

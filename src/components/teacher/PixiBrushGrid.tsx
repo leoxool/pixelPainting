@@ -19,6 +19,12 @@ interface BrushGridProps {
   draggedBrushId: string | null;
   onDropCompleted?: () => void;
   onViewModeChange?: (viewMode: ViewMode) => void;
+  onPresetsWithMetricsChange?: (presets: BrushWithMetrics[]) => void;
+  // Selection props
+  selectedBrushIds: string[];
+  onBrushSelect?: (brushId: string, isSelected: boolean) => void;
+  // Operation mode: 'browse' = double-click enters album, 'edit' = click selects
+  mode?: 'browse' | 'edit';
 }
 
 interface BrushMetrics {
@@ -35,11 +41,22 @@ interface BrushSpriteData {
   container: Container;
   sprite: Sprite | null;
   border: Graphics;
+  selectionRing: Graphics;
   preset: BrushWithMetrics;
   gridX: number;
   gridY: number;
   index: number;
 }
+
+// Hue range definitions for histogram
+const HUE_RANGES = {
+  '红橙': { min: 0, max: 60 },      // 0-60°
+  '黄绿': { min: 60, max: 150 },    // 60-150°
+  '绿青': { min: 150, max: 220 },   // 150-220°
+  '蓝紫': { min: 220, max: 300 },   // 220-300°
+} as const;
+
+const SATURATION_THRESHOLD = 0.15; // 低饱和度阈值，低于此值视为灰度
 
 function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
   const layerData = preset.layers[0];
@@ -64,8 +81,17 @@ function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
 
       let totalBrightness = 0;
       let totalSaturation = 0;
-      let totalHue = 0;
       let pixelCount = 0;
+
+      // 用于统计各色相范围的像素数量
+      const hueHistogram: Record<string, number> = {
+        '红橙': 0,
+        '黄绿': 0,
+        '绿青': 0,
+        '蓝紫': 0,
+        '灰度': 0, // 饱和度很低的像素
+      };
+      let colorfulPixelCount = 0; // 有色彩信息的像素总数
 
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
@@ -85,12 +111,6 @@ function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
         }
         totalBrightness += brightness;
 
-        const max = Math.max(r, g, b);
-        const min = Math.min(r, g, b);
-        const delta = max - min;
-
-        let saturation = 0;
-        let hue = 0;
         if (a > 0) {
           const alpha = a / 255;
           const blendedR = r * alpha + 255 * (1 - alpha);
@@ -99,6 +119,9 @@ function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
           const blendedMax = Math.max(blendedR, blendedG, blendedB);
           const blendedMin = Math.min(blendedR, blendedG, blendedB);
           const blendedDelta = blendedMax - blendedMin;
+
+          let saturation = 0;
+          let hue = 0;
 
           if (blendedDelta > 0) {
             saturation = blendedDelta / blendedMax;
@@ -112,17 +135,58 @@ function calculateBrushMetrics(preset: BrushPreset): Promise<BrushMetrics> {
             hue *= 60;
             if (hue < 0) hue += 360;
           }
-        }
 
-        totalSaturation += saturation;
-        totalHue += hue;
-        pixelCount++;
+          totalSaturation += saturation;
+          pixelCount++;
+
+          // 统计色相直方图
+          if (saturation >= SATURATION_THRESHOLD) {
+            colorfulPixelCount++;
+            // 判断该像素属于哪个色相范围
+            if (hue >= HUE_RANGES['红橙'].min && hue < HUE_RANGES['红橙'].max) {
+              hueHistogram['红橙']++;
+            } else if (hue >= HUE_RANGES['黄绿'].min && hue < HUE_RANGES['黄绿'].max) {
+              hueHistogram['黄绿']++;
+            } else if (hue >= HUE_RANGES['绿青'].min && hue < HUE_RANGES['绿青'].max) {
+              hueHistogram['绿青']++;
+            } else if (hue >= HUE_RANGES['蓝紫'].min && hue < HUE_RANGES['蓝紫'].max) {
+              hueHistogram['蓝紫']++;
+            } else {
+              // 其他色彩（如偏红的330-360和偏蓝的300-330）
+              hueHistogram['蓝紫']++; // 归入蓝紫色范围
+            }
+          } else {
+            hueHistogram['灰度']++;
+          }
+        } else {
+          // 透明像素视为灰度
+          hueHistogram['灰度']++;
+          pixelCount++;
+        }
+      }
+
+      // 计算最终色相：选择像素数量最多的色相范围的中心值
+      let dominantHue = 0;
+      let maxCount = 0;
+      const hueCenters: Record<string, number> = {
+        '红橙': 30,    // 0-60 的中心
+        '黄绿': 105,   // 60-150 的中心
+        '绿青': 185,   // 150-220 的中心
+        '蓝紫': 260,   // 220-300 的中心
+        '灰度': 0,
+      };
+
+      for (const [range, count] of Object.entries(hueHistogram)) {
+        if (count > maxCount) {
+          maxCount = count;
+          dominantHue = hueCenters[range];
+        }
       }
 
       resolve({
         brightness: pixelCount > 0 ? totalBrightness / pixelCount : 128,
         saturation: pixelCount > 0 ? totalSaturation / pixelCount : 0,
-        hue: pixelCount > 0 ? totalHue / pixelCount : 0,
+        hue: dominantHue,
       });
     };
     img.onerror = () => {
@@ -140,7 +204,7 @@ function sortPresets(presets: BrushWithMetrics[], rule: SortRule): BrushWithMetr
       sorted.sort((a, b) => b.timestamp - a.timestamp);
       break;
     case 'brightness':
-      sorted.sort((a, b) => (b.metrics?.brightness ?? 128) - (a.metrics?.brightness ?? 128));
+      sorted.sort((a, b) => (a.metrics?.brightness ?? 128) - (b.metrics?.brightness ?? 128));
       break;
     case 'saturation':
       sorted.sort((a, b) => (b.metrics?.saturation ?? 0) - (a.metrics?.saturation ?? 0));
@@ -206,6 +270,10 @@ export function PixiBrushGrid({
   draggedBrushId,
   onDropCompleted,
   onViewModeChange,
+  onPresetsWithMetricsChange,
+  selectedBrushIds = [],
+  onBrushSelect,
+  mode = 'edit',
 }: BrushGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -219,6 +287,18 @@ export function PixiBrushGrid({
   const isDraggingRef = useRef(false);
   // 延迟 ghost 创建：等待鼠标移动超过阈值才显示 ghost
   const pendingDragRef = useRef<{ preset: BrushWithMetrics; startX: number; startY: number } | null>(null);
+  // 套索选择模式：鼠标按下拖动过程中，用于记录已选中的笔刷（避免重复选中）
+  const lassoSelectedBrushesRef = useRef<Set<string>>(new Set());
+  // 当前是否处于套索选择模式（非标准拖动）
+  const isLassoSelectingRef = useRef(false);
+  // 上一次套索选择时的指针位置，用于判断是否移动了足够距离
+  const lassoLastXRef = useRef<number>(0);
+  const lassoLastYRef = useRef<number>(0);
+  // 套索线起始点（按下时的位置）
+  const lassoStartXRef = useRef<number>(0);
+  const lassoStartYRef = useRef<number>(0);
+  // 套索线Graphics引用
+  const lassoGraphicsRef = useRef<Graphics | null>(null);
 
   // Global pointerup handler - defined at top level so cleanup can reference it
   const handleGlobalPointerUpRef = useRef<() => void>(() => {});
@@ -229,6 +309,15 @@ export function PixiBrushGrid({
       draggingPresetIdRef.current = null;
       removeDragGhost();
     }
+    // 结束套索选择
+    if (isLassoSelectingRef.current) {
+      isLassoSelectingRef.current = false;
+      lassoSelectedBrushesRef.current.clear();
+      // 清除套索线
+      if (lassoGraphicsRef.current) {
+        lassoGraphicsRef.current.clear();
+      }
+    }
   };
 
   const [presetsWithMetrics, setPresetsWithMetrics] = useState<BrushWithMetrics[]>([]);
@@ -237,6 +326,13 @@ export function PixiBrushGrid({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const effectVersionRef = useRef(0);
   const sortedPresetsRef = useRef<BrushWithMetrics[]>([]);
+  // Keep selectedBrushIds in a ref for use in event handlers
+  const selectedBrushIdsRef = useRef<string[]>(selectedBrushIds);
+
+  // Update ref when selectedBrushIds changes
+  useEffect(() => {
+    selectedBrushIdsRef.current = selectedBrushIds;
+  }, [selectedBrushIds]);
 
   const PADDING = 52;
   const availableWidth = Math.max(containerWidth - PADDING * 2, 100);
@@ -252,9 +348,10 @@ export function PixiBrushGrid({
         })
       );
       setPresetsWithMetrics(results);
+      onPresetsWithMetricsChange?.(results);
     };
     calculateAll();
-  }, [presets]);
+  }, [presets, onPresetsWithMetricsChange]);
 
   const sortedPresets = sortPresets(presetsWithMetrics, sortRule);
   const { columns, brushSize } = calculateGridDimensions(availableWidth, availableHeight, sortedPresets.length);
@@ -263,6 +360,14 @@ export function PixiBrushGrid({
   useEffect(() => {
     sortedPresetsRef.current = sortedPresets;
   }, [sortedPresets]);
+
+  // When mode changes to 'edit', exit focused mode if in browse mode
+  useEffect(() => {
+    if (mode === 'edit' && viewMode === 'focused') {
+      setViewMode('grid');
+      onViewModeChange?.('grid');
+    }
+  }, [mode, viewMode, onViewModeChange]);
 
   // Load texture helper
   const loadTexture = useCallback(async (preset: BrushWithMetrics): Promise<Texture | null> => {
@@ -371,11 +476,16 @@ export function PixiBrushGrid({
         // Create containers for grid and album views
         const grid = new Container();
         const album = new Container();
+        // Create lasso line graphics (added to grid so it renders behind sprites)
+        const lassoGraphics = new Graphics();
+        grid.addChild(lassoGraphics);
         app.stage.addChild(grid);
         app.stage.addChild(album);
 
         gridContainerRef.current = grid;
         albumContainerRef.current = album;
+        // Store lasso graphics reference
+        lassoGraphicsRef.current = lassoGraphics;
 
         // Global pointerup to end drag (on document level to catch events outside canvas)
         app.stage.eventMode = 'static';
@@ -426,7 +536,7 @@ export function PixiBrushGrid({
     return () => observer.disconnect();
   }, [isReady]);
 
-  // Pointer move handler for dragging ghost
+  // Pointer move handler for dragging ghost and lasso selection
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
       // 检查是否有待创建的 ghost
@@ -448,11 +558,78 @@ export function PixiBrushGrid({
         dragGhostRef.current.style.left = `${e.clientX - 30}px`;
         dragGhostRef.current.style.top = `${e.clientY - 30}px`;
       }
+
+      // 套索选择模式：检测指针是否经过笔刷
+      if (isLassoSelectingRef.current && pendingDragRef.current) {
+        const dx = e.clientX - lassoLastXRef.current;
+        const dy = e.clientY - lassoLastYRef.current;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // 获取 canvas 位置以便将 client 坐标转换为 canvas 坐标
+        const canvasRect = containerRef.current?.getBoundingClientRect();
+
+        // 绘制套索线：从起始点到当前鼠标位置
+        if (lassoGraphicsRef.current && canvasRect) {
+          // 获取 PixiJS canvas 尺寸和 CSS 尺寸的比例
+          const app = appRef.current;
+          if (app) {
+            const cssWidth = containerRef.current!.clientWidth;
+            const cssHeight = containerRef.current!.clientHeight;
+            const pixiWidth = app.screen.width;
+            const pixiHeight = app.screen.height;
+            const scaleX = pixiWidth / cssWidth;
+            const scaleY = pixiHeight / cssHeight;
+
+            const startX = (lassoStartXRef.current - canvasRect.left) * scaleX;
+            const startY = (lassoStartYRef.current - canvasRect.top) * scaleY;
+            const currentX = (e.clientX - canvasRect.left) * scaleX;
+            const currentY = (e.clientY - canvasRect.top) * scaleY;
+
+            lassoGraphicsRef.current.clear();
+            lassoGraphicsRef.current.moveTo(startX, startY);
+            lassoGraphicsRef.current.lineTo(currentX, currentY);
+            lassoGraphicsRef.current.stroke({ width: 30, color: 0xff0000, alpha: 0.50 });
+          }
+        }
+
+        // 只有移动超过阈值才检测碰撞
+        if (distance > 8) {
+          if (canvasRect) {
+            const canvasX = e.clientX - canvasRect.left;
+            const canvasY = e.clientY - canvasRect.top;
+
+            // 检查所有笔刷容器是否与指针碰撞
+            brushSpritesRef.current.forEach((brushData) => {
+              const spriteX = brushData.gridX;
+              const spriteY = brushData.gridY;
+              const halfSize = brushSize / 2 + 5; // 加一点padding
+              if (
+                canvasX >= spriteX - halfSize &&
+                canvasX <= spriteX + halfSize &&
+                canvasY >= spriteY - halfSize &&
+                canvasY <= spriteY + halfSize
+              ) {
+                lassoSelectedBrushesRef.current.add(brushData.preset.id);
+                // 套索选择时鼠标掠过立即显示红环
+                brushData.selectionRing.visible = true;
+              } else {
+                // 如果不在当前套索路径上且未被父组件选中，则隐藏
+                if (!selectedBrushIdsRef.current.includes(brushData.preset.id)) {
+                  brushData.selectionRing.visible = false;
+                }
+              }
+            });
+          }
+
+          lassoLastXRef.current = e.clientX;
+          lassoLastYRef.current = e.clientY;
+        }
+      }
     };
 
     window.addEventListener('pointermove', handlePointerMove);
     return () => window.removeEventListener('pointermove', handlePointerMove);
-  }, [createDragGhost]);
+  }, [createDragGhost, brushSize]);
 
   // Keyboard navigation for focused view
   useEffect(() => {
@@ -475,6 +652,73 @@ export function PixiBrushGrid({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [viewMode, sortedPresets.length]);
+
+  // Listen for quick selection events from BrushGroupEditor
+  useEffect(() => {
+    const handleQuickSelect = (e: Event) => {
+      const customEvent = e as CustomEvent<{ type: string; range?: { min: number; max: number }; hueRange?: string; threshold?: number }>;
+      const { type } = customEvent.detail;
+
+      if (type === 'clear') {
+        // Clear selection - for now, we just log it
+        console.log('Quick select: clear');
+        return;
+      }
+
+      if (type === 'hue' && customEvent.detail.range) {
+        const { range } = customEvent.detail;
+        // Filter presets by hue range and trigger drag selection
+        const matchingPresets = presetsWithMetrics.filter(p => {
+          if (!p.metrics) return false;
+          const hue = p.metrics.hue;
+          // Handle wrap-around for red/orange (0-60) and blue/purple (220-300)
+          if (range.min > range.max) {
+            // Wrapping range like 220-300 for blue/purple
+            return hue >= range.min || hue <= range.max;
+          }
+          return hue >= range.min && hue <= range.max;
+        });
+        if (matchingPresets.length > 0) {
+          // Start drag with the first matching preset
+          const firstPreset = matchingPresets[0];
+          const mockEvent = {
+            dataTransfer: {
+              types: [],
+              setData: () => {},
+              effectAllowed: 'copy',
+              setDragImage: () => {},
+              getData: () => '',
+            },
+          } as unknown as React.DragEvent;
+          onPresetDragStart(mockEvent, firstPreset.id);
+        }
+      }
+
+      if (type === 'saturation' && customEvent.detail.threshold !== undefined) {
+        const { threshold } = customEvent.detail;
+        const matchingPresets = presetsWithMetrics.filter(p => {
+          if (!p.metrics) return false;
+          return p.metrics.saturation < threshold;
+        });
+        if (matchingPresets.length > 0) {
+          const firstPreset = matchingPresets[0];
+          const mockEvent = {
+            dataTransfer: {
+              types: [],
+              setData: () => {},
+              effectAllowed: 'copy',
+              setDragImage: () => {},
+              getData: () => '',
+            },
+          } as unknown as React.DragEvent;
+          onPresetDragStart(mockEvent, firstPreset.id);
+        }
+      }
+    };
+
+    window.addEventListener('brushQuickSelect', handleQuickSelect);
+    return () => window.removeEventListener('brushQuickSelect', handleQuickSelect);
+  }, [presetsWithMetrics, onPresetDragStart]);
 
   // Create brush sprite for grid view
   const createBrushSprite = useCallback(async (
@@ -525,19 +769,53 @@ export function PixiBrushGrid({
       container.addChild(placeholder);
     }
 
+    // Selection ring (annulus: outer radius 25, inner radius 10, red with 30% opacity)
+    // Draw as a thick stroke circle - stroke centered at midpoint of inner/outer radius
+    const selectionRing = new Graphics();
+    const ringOuterRadius = 25;
+    const ringInnerRadius = 10;
+    const ringMidRadius = (ringOuterRadius + ringInnerRadius) / 2; // 17.5
+    const ringThickness = ringOuterRadius - ringInnerRadius; // 15
+    selectionRing.circle(0, 0, ringMidRadius);
+    selectionRing.stroke({ width: ringThickness, color: 0xff0000, alpha: 0.50 });
+    selectionRing.visible = false;
+    container.addChild(selectionRing);
+
     const brushData: BrushSpriteData = {
       container,
       sprite,
       border,
+      selectionRing,
       preset,
       gridX: x,
       gridY: y,
       index,
     };
 
-    // Pointer down - start drag (but don't show ghost until movement)
+    // Pointer down - start drag or selection
     container.on('pointerdown', (event) => {
       event.stopPropagation();
+
+      // If onBrushSelect is provided AND mode is 'edit', enter selection mode
+      // In 'browse' mode, we go directly to drag mode for dropping into slots
+      if (onBrushSelect && mode === 'edit') {
+        // 进入套索选择模式：初始化选择状态
+        isLassoSelectingRef.current = true;
+        lassoLastXRef.current = event.global.x;
+        lassoLastYRef.current = event.global.y;
+        lassoStartXRef.current = event.global.x;
+        lassoStartYRef.current = event.global.y;
+        // 点击立即显示红环（不必等鼠标松开）
+        selectionRing.visible = true;
+        lassoSelectedBrushesRef.current.add(preset.id);
+        pendingDragRef.current = {
+          preset,
+          startX: event.global.x,
+          startY: event.global.y,
+        };
+        return;
+      }
+
       // 先清除之前的拖动状态，防止残留
       if (draggingPresetIdRef.current) {
         isDraggingRef.current = false;
@@ -569,9 +847,42 @@ export function PixiBrushGrid({
       onPresetDragStart(mockEvent, preset.id);
     });
 
-    // Pointer up - end drag
+    // Pointer up - end drag or selection
     container.on('pointerup', (event) => {
       event.stopPropagation();
+
+      // Handle selection mode if onBrushSelect is provided AND mode is 'edit'
+      if (onBrushSelect && mode === 'edit' && pendingDragRef.current) {
+        const dx = event.global.x - pendingDragRef.current.startX;
+        const dy = event.global.y - pendingDragRef.current.startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // If moved enough, treat as lasso selection (select all hovered brushes)
+        if (distance >= 10) {
+          // 只选择之前未选中的笔刷（避免重复计数）
+          const brushesToSelect = Array.from(lassoSelectedBrushesRef.current).filter(
+            brushId => !selectedBrushIdsRef.current.includes(brushId)
+          );
+          if (brushesToSelect.length > 0) {
+            brushesToSelect.forEach(brushId => {
+              onBrushSelect(brushId, true);
+            });
+          }
+          isLassoSelectingRef.current = false;
+          lassoSelectedBrushesRef.current.clear();
+          // 清除套索线
+          if (lassoGraphicsRef.current) {
+            lassoGraphicsRef.current.clear();
+          }
+        } else {
+          // 点击选择：切换单个笔刷的选中状态
+          const isSelected = selectedBrushIdsRef.current.includes(preset.id);
+          onBrushSelect(preset.id, !isSelected);
+        }
+        pendingDragRef.current = null;
+        return;
+      }
+
       if (!isDraggingRef.current) return;
 
       const now = Date.now();
@@ -594,8 +905,8 @@ export function PixiBrushGrid({
         onDropCompleted?.();
       }
 
-      // 只有在拖动到有效目标时才触发双击检查
-      if (wasDragging && isDoubleClick) {
+      // 只有在浏览模式下双击才会进入相册模式
+      if (wasDragging && isDoubleClick && mode === 'browse') {
         // Find the current index of this preset in sortedPresets
         const currentIndex = sortedPresetsRef.current.findIndex(p => p.id === preset.id);
         setSelectedIndex(currentIndex >= 0 ? currentIndex : index);
@@ -620,7 +931,7 @@ export function PixiBrushGrid({
 
     gridContainer.addChild(container);
     brushSpritesRef.current.set(preset.id, brushData);
-  }, [columns, brushSize, loadTexture, createDragGhost, removeDragGhost, onPresetDragStart, onPresetDragEnd]);
+  }, [columns, brushSize, loadTexture, createDragGhost, removeDragGhost, onPresetDragStart, onPresetDragEnd, mode, onBrushSelect]);
 
   // Build grid view - only when presets change (not when sort order changes)
   useEffect(() => {
@@ -797,6 +1108,16 @@ export function PixiBrushGrid({
       }
     });
   }, [draggedBrushId, isReady, brushSize]);
+
+  // Update selection ring visibility when selectedBrushIds changes
+  useEffect(() => {
+    if (!isReady) return;
+
+    brushSpritesRef.current.forEach((brushData) => {
+      const isSelected = selectedBrushIds.includes(brushData.preset.id);
+      brushData.selectionRing.visible = isSelected;
+    });
+  }, [selectedBrushIds, isReady]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

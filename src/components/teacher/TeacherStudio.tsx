@@ -15,6 +15,8 @@ import { getLevelGray, extractGridData, renderArt } from './gridUtils';
 import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset, getBrushGroups as dbGetBrushGroups, saveBrushGroups as dbSaveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 import { FloatingWindow } from './FloatingWindow';
 import { TopBar } from './TopBar';
+import { SyncDisplayCanvases } from './SyncDisplayCanvases';
+import { SyncSourceDisplay } from './SyncSourceDisplay';
 import JSZip from 'jszip';
 
 type DataSource = 'webcam' | 'image';
@@ -55,41 +57,6 @@ const BRUSH_SIZE = 200;
 
 type TabType = 'brushEdit' | 'renderOutput';
 
-// Component to sync display canvases with actual brush canvases
-function SyncDisplayCanvases({ trigger, brushLayers }: { trigger: number; brushLayers: (BrushLayer | null)[] }) {
-  useEffect(() => {
-    for (let i = 0; i < 10; i++) {
-      const displayCanvas = document.getElementById(`brush-display-canvas-${i}`) as HTMLCanvasElement;
-      const layer = brushLayers[i];
-      if (displayCanvas && layer?.canvas) {
-        const ctx = displayCanvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
-          ctx.drawImage(layer.canvas, 0, 0);
-        }
-      }
-    }
-  }, [trigger, brushLayers]);
-  return null;
-}
-
-// Component to sync source display canvas with actual source canvas
-function SyncSourceDisplay({ trigger, sourceImageData, currentStage }: { trigger: number; sourceImageData: ImageData | null; currentStage: string }) {
-  useEffect(() => {
-    if (!sourceImageData) return;
-    const displayCanvas = document.getElementById('source-display-canvas') as HTMLCanvasElement;
-    if (displayCanvas) {
-      const ctx = displayCanvas.getContext('2d');
-      if (ctx) {
-        displayCanvas.width = sourceImageData.width;
-        displayCanvas.height = sourceImageData.height;
-        ctx.putImageData(sourceImageData, 0, 0);
-      }
-    }
-  }, [trigger, sourceImageData, currentStage]);
-  return null;
-}
-
 interface TeacherStudioProps {
   currentStage: Stage;
   onStageChange: (stage: Stage) => void;
@@ -99,7 +66,6 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   { currentStage, onStageChange }: TeacherStudioProps,
   ref: React.Ref<{ importBrushStrip: (imageUrl: string) => Promise<void>; loadSourceImage: (imageUrl: string) => Promise<void> }>
 ) {
-  const [activeTab, setActiveTab] = useState<TabType>('brushEdit');
   const [dataSource, setDataSource] = useState<DataSource>('webcam');
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [brushSize, setBrushSize] = useState(10);
@@ -147,8 +113,6 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   // 加载笔刷组弹窗
   const [showBrushGroupLoadModal, setShowBrushGroupLoadModal] = useState(false);
   const [brushGroupsForLoad, setBrushGroupsForLoad] = useState<BrushGroup[]>([]);
-  // 笔刷编辑模式切换: 'single'=单个笔刷编辑, 'group'=笔刷组编辑
-  const [brushEditMode, setBrushEditMode] = useState<'single' | 'group'>('single');
   // 单个笔刷编辑相关状态
   const [hoveredPresetId, setHoveredPresetId] = useState<string | null>(null);
   // 拖拽相关状态
@@ -162,14 +126,10 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   // 待应用的笔刷图像数据（从调整预览复制到编辑器）
   const [pendingBrushImageData, setPendingBrushImageData] = useState<ImageData | null>(null);
 
-  // 笔刷组编辑相关状态
+  // 笔刷组编辑相关状态 - 默认10个槽位用于新建笔刷组
   const [brushGroupSlots, setBrushGroupSlots] = useState<(BrushPreset | null)[]>(Array(10).fill(null));
   // 用于触发笔刷组列表更新
   const [brushGroupUpdateTrigger, setBrushGroupUpdateTrigger] = useState(0);
-
-  // Stage-based navigation (replaces tab + brushEditMode)
-// Use props from parent, not internal state
-// const [currentStage, setCurrentStage] = useState<Stage>('single');
 
   // Floating window visibility states
   const [showBrushLibraryPanel, setShowBrushLibraryPanel] = useState(true);
@@ -185,7 +145,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   const sourceCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   const brushCanvasesRef = useRef<(HTMLCanvasElement | null)[]>([]);
-  const brushLayersRef = useRef<(BrushLayer | null)[]>(Array(10).fill(null));
+  const brushLayersRef = useRef<(BrushLayer | null)[]>(Array(100).fill(null));
 
   const outputCanvasRef = useRef<HTMLCanvasElement>(null);
   const outputCtxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -301,18 +261,32 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   // 笔刷组操作
   const handleBrushGroupSlotChange = useCallback((index: number, preset: BrushPreset | null) => {
     setBrushGroupSlots(prev => {
-      const updated = [...prev];
+      // Expand array if index is beyond current length (minimum 5 slots)
+      const minSize = 5;
+      const currentSize = prev.length;
+      let updated: (BrushPreset | null)[];
+      if (index >= currentSize) {
+        updated = [...prev, ...Array(index - currentSize + 1).fill(null)];
+      } else {
+        updated = [...prev];
+      }
       updated[index] = preset;
       return updated;
     });
   }, []);
 
   const handleSaveBrushGroup = useCallback(async (name: string) => {
+    // Filter out trailing nulls, keep at least 5 slots worth of data
+    const filledSlots = brushGroupSlots.filter(s => s !== null);
+    const slotsToSave = filledSlots.length >= 5
+      ? filledSlots.map(p => p?.id || null)
+      : brushGroupSlots.map(p => p?.id || null); // Keep original if less than 5
+
     const group: BrushGroup = {
       id: Date.now().toString(),
       name,
       timestamp: Date.now(),
-      slots: brushGroupSlots.map(p => p?.id || null),
+      slots: slotsToSave,
     };
     try {
       const existing = await dbGetBrushGroups();
@@ -326,31 +300,77 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   }, [brushGroupSlots]);
 
   const handleLoadBrushGroup = useCallback((group: BrushGroup) => {
-    const loadedSlots: (BrushPreset | null)[] = group.slots.map(slotId => {
-      if (!slotId) return null;
-      return brushPresets.find(p => p.id === slotId) || null;
+    // Note: brushGroupSlots is NOT updated here - floating window is only for creating new brush groups
+    // This function loads the group for rendering preview only
+
+    const slotCount = group.slots.length;
+
+    // Find indices of filled slots for fallback logic
+    const filledSlots: number[] = [];
+    group.slots.forEach((slotId, index) => {
+      if (slotId) filledSlots.push(index);
     });
-    setBrushGroupSlots(loadedSlots);
+
+    // Expand or contract brushLayersRef to match slot count
+    const currentLayers = brushLayersRef.current;
+    if (slotCount > currentLayers.length) {
+      // Expand array with nulls
+      brushLayersRef.current = [...currentLayers, ...Array(slotCount - currentLayers.length).fill(null)];
+    } else if (slotCount < currentLayers.length) {
+      // Contract array
+      brushLayersRef.current = currentLayers.slice(0, slotCount);
+    }
 
     // Also load the brush images to brushLayersRef for rendering
     group.slots.forEach((slotId, index) => {
-      if (!slotId) return;
-      const preset = brushPresets.find(p => p.id === slotId);
-      if (!preset || !preset.layers[0]) return;
-
       const canvas = brushCanvasesRef.current[index];
       if (!canvas) return;
 
-      const img = new Image();
-      img.onload = () => {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
-          ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
-          brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
+      if (slotId) {
+        // Filled slot - load the actual brush
+        const preset = brushPresets.find(p => p.id === slotId);
+        if (!preset || !preset.layers[0]) return;
+
+        const img = new Image();
+        img.onload = () => {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+            ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+            brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
+          }
+        };
+        img.src = preset.layers[0];
+      } else {
+        // Empty slot - find nearest filled slot and use its brush (interleaved fallback)
+        if (filledSlots.length === 0) return;
+
+        // Find nearest filled slot (smallest absolute distance)
+        let nearestFilledIndex = filledSlots[0];
+        let minDistance = Math.abs(index - nearestFilledIndex);
+        for (let i = 1; i < filledSlots.length; i++) {
+          const distance = Math.abs(index - filledSlots[i]);
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestFilledIndex = filledSlots[i];
+          }
         }
-      };
-      img.src = preset.layers[0];
+
+        const nearestSlotId = group.slots[nearestFilledIndex];
+        const preset = brushPresets.find(p => p.id === nearestSlotId);
+        if (!preset || !preset.layers[0]) return;
+
+        const img = new Image();
+        img.onload = () => {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
+            ctx.drawImage(img, 0, 0, BRUSH_SIZE, BRUSH_SIZE);
+            brushLayersRef.current[index] = { canvas, ctx, isDrawing: false };
+          }
+        };
+        img.src = preset.layers[0];
+      }
     });
 
     setBrushUpdateTrigger(t => t + 1);
@@ -574,6 +594,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   // getLevelGray and mapGrayscaleToLevel are now in gridUtils.ts
 
   const handleRenderArt = useCallback(() => {
+    const slotCount = brushLayersRef.current.length || 5;
     renderArt({
       outputCanvasRef,
       outputCtxRef,
@@ -583,11 +604,9 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
       sourceAspectRatio,
       gridSizeX,
       gridSizeY,
-      sizeJitter,
-      rotationJitter,
-      enableFlip,
+      slotCount,
     });
-  }, [sourceAspectRatio, gridSizeX, gridSizeY, sizeJitter, rotationJitter, enableFlip]);
+  }, [sourceAspectRatio, gridSizeX, gridSizeY]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -1595,7 +1614,6 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
         setSourceAspectRatio(1);
         setSourceResolution({ width: canvasWidth, height: canvasHeight });
         setSourceUpdateTrigger(t => t + 1);
-        setActiveTab('renderOutput');
         resolve();
       };
       img.onerror = () => reject(new Error('Failed to load image'));
@@ -1882,7 +1900,11 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
               onSlotChange={handleBrushGroupSlotChange}
               onSlotClick={openBrushEditor}
               onSaveGroup={handleSaveBrushGroup}
-              onClearAll={() => setBrushGroupSlots(Array(10).fill(null))}
+              onClearAll={() => {
+                setBrushGroupSlots(Array(10).fill(null));
+                // Also clear brush layers
+                brushLayersRef.current = Array(10).fill(null);
+              }}
               brushUpdateTrigger={brushUpdateTrigger}
               onLoadGroup={handleLoadBrushGroup}
               brushGroupUpdateTrigger={brushGroupUpdateTrigger}
@@ -2044,7 +2066,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
 
       {/* Persistent Brush Canvases - Always rendered, never unmounted */}
       <div className="hidden">
-        {Array.from({ length: 10 }).map((_, index) => (
+        {Array.from({ length: 100 }).map((_, index) => (
           <canvas
             key={`persistent-brush-${index}`}
             ref={(el) => { brushCanvasesRef.current[index] = el; }}
@@ -2070,7 +2092,7 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
       <SyncDisplayCanvases trigger={brushUpdateTrigger} brushLayers={brushLayersRef.current} />
 
       {/* Sync source display canvas */}
-      <SyncSourceDisplay trigger={sourceUpdateTrigger} sourceImageData={sourceImageDataRef.current} currentStage={currentStage} />
+      <SyncSourceDisplay trigger={sourceUpdateTrigger} sourceImageData={sourceImageDataRef.current} />
     </div>
   );
 });

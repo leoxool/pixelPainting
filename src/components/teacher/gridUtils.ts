@@ -3,19 +3,20 @@ import { GridCell } from './types';
 import { SOURCE_WIDTH, SOURCE_HEIGHT, BRUSH_SIZE } from './constants';
 
 /**
- * Convert level (0-9) to gray color string
+ * Convert level to gray color string based on slot count
  */
-export function getLevelGray(level: number): string {
-  const gray = Math.floor(level * 25.5);
+export function getLevelGray(level: number, slotCount: number = 10): string {
+  const gray = Math.floor((level / (slotCount - 1)) * 255);
   return `rgb(${gray}, ${gray}, ${gray})`;
 }
 
 /**
- * Convert grayscale value (0-255) to level (0-9)
+ * Convert grayscale value (0-255) to level based on slot count
+ * Slot index directly maps to grayscale level (slot 0 = brightest, slot N-1 = darkest)
  */
-export function mapGrayscaleToLevel(grayscale: number): number {
+export function mapGrayscaleToLevel(grayscale: number, slotCount: number = 10): number {
   const clamped = Math.max(0, Math.min(255, grayscale));
-  return Math.min(9, Math.max(0, Math.floor((clamped / 255) * 10)));
+  return Math.min(slotCount - 1, Math.max(0, Math.floor((clamped / 255) * slotCount)));
 }
 
 interface ExtractGridDataParams {
@@ -24,6 +25,7 @@ interface ExtractGridDataParams {
   sourceAspectRatio: number;
   gridSizeX: number;
   gridSizeY: number;
+  slotCount?: number;  // 默认10
 }
 
 /**
@@ -35,6 +37,7 @@ export function extractGridData({
   sourceAspectRatio,
   gridSizeX,
   gridSizeY,
+  slotCount = 10,
 }: ExtractGridDataParams): GridCell[][] {
   const sourceCanvas = sourceCanvasRef.current;
   const sourceCtx = sourceCtxRef.current;
@@ -61,13 +64,14 @@ export function extractGridData({
   const imageData = sourceCtx.getImageData(0, 0, canvasWidth, canvasHeight);
   const data = imageData.data;
 
+  // First pass: collect grayscale values for all cells
+  const cellGrayscale: number[] = [];
   for (let row = 0; row < gridSizeY; row++) {
-    grid[row] = [];
     for (let col = 0; col < gridSizeX; col++) {
       const startX = Math.floor(drawX + col * cellWidth);
       const startY = Math.floor(drawY + row * cellHeight);
       const endX = Math.floor(drawX + (col + 1) * cellWidth);
-      const endY = Math.floor(drawY + (row + 1) * cellHeight);
+      const endY = Math.floor(drawY + (col + 1) * cellHeight);
 
       let totalGrayscale = 0;
       let pixelCount = 0;
@@ -83,7 +87,37 @@ export function extractGridData({
       }
 
       const avgGrayscale = pixelCount > 0 ? totalGrayscale / pixelCount : 128;
-      grid[row][col] = { row, col, grayscale: avgGrayscale, level: mapGrayscaleToLevel(avgGrayscale) };
+      cellGrayscale[row * gridSizeX + col] = avgGrayscale;
+    }
+  }
+
+  // Find min and max grayscale for dynamic mapping
+  let minGrayscale = 255;
+  let maxGrayscale = 0;
+  for (let i = 0; i < cellGrayscale.length; i++) {
+    minGrayscale = Math.min(minGrayscale, cellGrayscale[i]);
+    maxGrayscale = Math.max(maxGrayscale, cellGrayscale[i]);
+  }
+
+  const grayscaleRange = maxGrayscale - minGrayscale;
+
+  // Second pass: build grid with dynamic level mapping
+  for (let row = 0; row < gridSizeY; row++) {
+    grid[row] = [];
+    for (let col = 0; col < gridSizeX; col++) {
+      const idx = row * gridSizeX + col;
+      const avgGrayscale = cellGrayscale[idx];
+
+      let level: number;
+      if (grayscaleRange === 0) {
+        // All cells have the same grayscale - use middle level
+        level = Math.floor(slotCount / 2);
+      } else {
+        // Map grayscale to level based on actual range
+        level = Math.floor(((avgGrayscale - minGrayscale) / grayscaleRange) * (slotCount - 1));
+      }
+      level = Math.min(slotCount - 1, Math.max(0, level));
+      grid[row][col] = { row, col, grayscale: avgGrayscale, level };
     }
   }
   return grid;
@@ -98,9 +132,7 @@ interface RenderArtParams {
   sourceAspectRatio: number;
   gridSizeX: number;
   gridSizeY: number;
-  sizeJitter: number;
-  rotationJitter: number;
-  enableFlip: boolean;
+  slotCount?: number;
 }
 
 interface BrushLayer {
@@ -121,9 +153,7 @@ export function renderArt({
   sourceAspectRatio,
   gridSizeX,
   gridSizeY,
-  sizeJitter,
-  rotationJitter,
-  enableFlip,
+  slotCount = 10,
 }: RenderArtParams): void {
   const outputCanvas = outputCanvasRef.current;
   const outputCtx = outputCtxRef.current;
@@ -156,54 +186,15 @@ export function renderArt({
     sourceAspectRatio,
     gridSizeX,
     gridSizeY,
+    slotCount,
   });
   if (grid.length === 0) return;
-
-  // Create a temporary canvas for applying transformations
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = BRUSH_SIZE;
-  tempCanvas.height = BRUSH_SIZE;
-  const tempCtx = tempCanvas.getContext('2d');
-
-  // Simple hash function for deterministic randomness
-  const hash = (x: number, y: number, seed: number = 0): number => {
-    return ((Math.sin(x * 127.1 + y * 311.7 + seed) * 43758.5453) % 1 + 1) % 1;
-  };
 
   for (let row = 0; row < gridSizeY; row++) {
     for (let col = 0; col < gridSizeX; col++) {
       const layer = brushLayersRef.current[grid[row][col].level];
-      if (layer && tempCtx) {
-        tempCtx.clearRect(0, 0, BRUSH_SIZE, BRUSH_SIZE);
-
-        // Apply size jitter
-        const k = sizeJitter / 100;
-        const randSize = hash(col, row, 1);
-        const sizeFactor = 1.0 - k * 0.75 + randSize * k * 3.75;
-        const size = BRUSH_SIZE * sizeFactor;
-
-        // Apply rotation jitter
-        const randRot = hash(col, row, 2);
-        const maxRot = (rotationJitter * Math.PI) / 180;
-        const rotation = (randRot - 0.5) * 2 * maxRot;
-
-        // Apply flip
-        const randFlip = hash(col, row, 3);
-        const flip = enableFlip && randFlip > 0.5;
-
-        // Calculate scaled drawing position
-        const scaledSize = Math.min(cellWidth, cellHeight) * sizeFactor;
-        const dx = (cellWidth - scaledSize) / 2;
-        const dy = (cellHeight - scaledSize) / 2;
-
-        tempCtx.save();
-        tempCtx.translate(BRUSH_SIZE / 2, BRUSH_SIZE / 2);
-        tempCtx.rotate(rotation);
-        if (flip) tempCtx.scale(-1, 1);
-        tempCtx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, -scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize);
-        tempCtx.restore();
-
-        outputCtx.drawImage(tempCanvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, col * cellWidth + dx, row * cellHeight + dy, scaledSize, scaledSize);
+      if (layer) {
+        outputCtx.drawImage(layer.canvas, 0, 0, BRUSH_SIZE, BRUSH_SIZE, col * cellWidth, row * cellHeight, cellWidth, cellHeight);
       }
     }
   }

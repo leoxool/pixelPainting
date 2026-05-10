@@ -5,6 +5,7 @@ import { getLevelGray } from './gridUtils';
 
 interface BrushGroupSlotProps {
   slotIndex: number;
+  slotCount: number;
   brushPreset: BrushPreset | null;
   onSlotClick: (index: number) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -18,6 +19,7 @@ interface BrushGroupSlotProps {
 
 export function BrushGroupSlot({
   slotIndex,
+  slotCount,
   brushPreset,
   onSlotClick,
   onDragOver,
@@ -27,7 +29,7 @@ export function BrushGroupSlot({
   onPointerDragLeave,
   onPointerDrop,
 }: BrushGroupSlotProps) {
-  const levelGray = getLevelGray(slotIndex);
+  const levelGray = getLevelGray(slotIndex, slotCount);
   const layerData = brushPreset?.layers[0] || null;
 
   return (
