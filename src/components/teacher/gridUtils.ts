@@ -2,6 +2,8 @@
 import { GridCell } from './types';
 import { SOURCE_WIDTH, SOURCE_HEIGHT, BRUSH_SIZE } from './constants';
 
+const BRUSH_TEXTURE_SIZE = 100;
+
 /**
  * Convert level to gray color string based on slot count
  */
@@ -160,17 +162,9 @@ export function renderArt({
   if (!outputCanvas || !outputCtx) return;
   if (brushLayersRef.current.filter(l => l !== null).length === 0) return;
 
-  // 根据宽高比设置输出尺寸
-  const canvasWidth = sourceCanvasRef.current?.width || SOURCE_WIDTH;
-  const canvasHeight = sourceCanvasRef.current?.height || SOURCE_HEIGHT;
-  let outputWidth, outputHeight;
-  if (sourceAspectRatio >= 1) {
-    outputWidth = canvasWidth;
-    outputHeight = canvasWidth / sourceAspectRatio;
-  } else {
-    outputWidth = canvasHeight * sourceAspectRatio;
-    outputHeight = canvasHeight;
-  }
+  // Use same dimensions as TeacherParticleCanvas WebGL output for consistent rendering
+  const outputWidth = gridSizeX * BRUSH_TEXTURE_SIZE;
+  const outputHeight = gridSizeY * BRUSH_TEXTURE_SIZE;
 
   outputCanvas.width = Math.round(outputWidth);
   outputCanvas.height = Math.round(outputHeight);
