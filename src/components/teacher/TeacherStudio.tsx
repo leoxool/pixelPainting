@@ -2100,40 +2100,52 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
                   暂无保存的笔刷组
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {brushGroupsForLoad.map((group) => (
-                    <div
-                      key={group.id}
-                      className="p-3 bg-zinc-700 rounded-lg hover:bg-zinc-600 cursor-pointer transition-colors"
-                      onClick={() => {
-                        handleLoadBrushGroup(group);
-                        setShowBrushGroupLoadModal(false);
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium truncate">{group.name}</div>
-                        <div className="text-xs text-zinc-400">
-                          {new Date(group.timestamp).toLocaleDateString()}
+                <div className="space-y-3">
+                  {brushGroupsForLoad.map((group) => {
+                    // Get first 5 non-null slot IDs
+                    const previewSlots = group.slots.filter(id => id !== null).slice(0, 5);
+                    const totalCount = group.slots.filter(id => id !== null).length;
+                    return (
+                      <div
+                        key={group.id}
+                        className="p-3 bg-zinc-700 rounded-lg hover:bg-zinc-600 cursor-pointer transition-colors"
+                        onClick={() => {
+                          handleLoadBrushGroup(group);
+                          setShowBrushGroupLoadModal(false);
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs text-zinc-400">
+                            {totalCount} 个笔刷
+                          </div>
+                        </div>
+                        {/* Show first 5 brush thumbnails in a row */}
+                        <div className="flex gap-2 justify-center">
+                          {previewSlots.map((slotId, idx) => {
+                            const preset = brushPresets.find(p => p.id === slotId);
+                            const layerData = preset?.layers[0];
+                            return (
+                              <div
+                                key={idx}
+                                className="w-12 h-12 bg-zinc-600 rounded border border-zinc-500 overflow-hidden"
+                              >
+                                {layerData && (
+                                  <img src={layerData} alt="" className="w-full h-full object-contain" />
+                                )}
+                              </div>
+                            );
+                          })}
+                          {/* Fill empty slots if less than 5 */}
+                          {Array.from({ length: 5 - previewSlots.length }).map((_, idx) => (
+                            <div
+                              key={`empty-${idx}`}
+                              className="w-12 h-12 bg-zinc-800 rounded border border-zinc-600"
+                            />
+                          ))}
                         </div>
                       </div>
-                      <div className="flex gap-1 mt-2">
-                        {group.slots.map((slotId, i) => {
-                          const preset = brushPresets.find(p => p.id === slotId);
-                          const layerData = preset?.layers[0];
-                          return (
-                            <div
-                              key={i}
-                              className="w-6 h-6 bg-zinc-600 rounded border border-zinc-500 overflow-hidden"
-                            >
-                              {layerData && (
-                                <img src={layerData} alt="" className="w-full h-full object-contain" />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
