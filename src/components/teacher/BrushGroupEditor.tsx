@@ -603,7 +603,7 @@ export function BrushGroupEditor({
       {/* Brush Group Library Modal - above floating window */}
       {showLibraryModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setShowLibraryModal(false)}>
-          <div className="bg-zinc-800 rounded-2xl w-[400px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-zinc-800 rounded-2xl w-[500px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
               <h3 className="font-semibold text-sm">笔刷组库</h3>
               <button onClick={() => setShowLibraryModal(false)} className="p-1 hover:bg-zinc-700 rounded">
@@ -616,46 +616,53 @@ export function BrushGroupEditor({
               {savedGroups.length === 0 ? (
                 <div className="text-xs text-zinc-500 text-center py-8">暂无保存的笔刷组</div>
               ) : (
-                <div className="space-y-2">
-                  {savedGroups.map((group) => (
-                    <div
-                      key={group.id}
-                      className="p-3 bg-zinc-700 rounded-lg hover:bg-zinc-600 cursor-pointer"
-                      onClick={() => {
-                        onLoadGroup(group);
-                        setShowLibraryModal(false);
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Show first brush thumbnail */}
-                        <div className="w-12 h-12 bg-zinc-600 rounded border border-zinc-500 overflow-hidden shrink-0">
-                          {(() => {
-                            const firstSlotId = group.slots.find(id => id !== null);
-                            const preset = firstSlotId ? brushPresets.find(p => p.id === firstSlotId) : null;
-                            const layerData = preset?.layers[0];
-                            return layerData ? (
-                              <img src={layerData} alt="" className="w-full h-full object-contain" />
-                            ) : null;
-                          })()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{group.name}</div>
-                          <div className="text-xs text-zinc-400 mt-1">
+                <div className="space-y-3">
+                  {savedGroups.map((group) => {
+                    // Get first 5 non-null slot IDs
+                    const previewSlots = group.slots.filter(id => id !== null).slice(0, 5);
+                    return (
+                      <div
+                        key={group.id}
+                        className="p-3 bg-zinc-700 rounded-lg"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs text-zinc-400">
                             {group.slots.filter(id => id !== null).length} 个笔刷
                           </div>
+                          <button
+                            onClick={() => handleDeleteGroup(group.id)}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            删除
+                          </button>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteGroup(group.id);
-                          }}
-                          className="text-xs text-red-400 hover:text-red-300 shrink-0"
-                        >
-                          删除
-                        </button>
+                        {/* Show first 5 brush thumbnails in a row */}
+                        <div className="flex gap-2 justify-center">
+                          {previewSlots.map((slotId, idx) => {
+                            const preset = brushPresets.find(p => p.id === slotId);
+                            const layerData = preset?.layers[0];
+                            return (
+                              <div
+                                key={idx}
+                                className="w-12 h-12 bg-zinc-600 rounded border border-zinc-500 overflow-hidden"
+                              >
+                                {layerData && (
+                                  <img src={layerData} alt="" className="w-full h-full object-contain" />
+                                )}
+                              </div>
+                            );
+                          })}
+                          {/* Fill empty slots if less than 5 */}
+                          {Array.from({ length: 5 - previewSlots.length }).map((_, idx) => (
+                            <div
+                              key={`empty-${idx}`}
+                              className="w-12 h-12 bg-zinc-800 rounded border border-zinc-600"
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
