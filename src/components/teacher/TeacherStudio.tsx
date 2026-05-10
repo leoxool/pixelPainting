@@ -1727,11 +1727,45 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
         case 'f':
           setIsFullscreen(prev => !prev);
           break;
+        case ' ':
+          // Space: capture and save brush (only in single stage)
+          if (currentStage === 'single' && cameraStatus !== 'idle') {
+            e.preventDefault();
+            captureAndSave();
+          }
+          break;
+        case 'c':
+          // C: switch to webcam data source (only in render stage)
+          if (currentStage === 'render') {
+            e.preventDefault();
+            setDataSource('webcam');
+            startWebcam();
+          }
+          break;
+        case 'p':
+          // P: close webcam and switch to image source, open image dialog (only in render stage)
+          if (currentStage === 'render') {
+            e.preventDefault();
+            stopWebcam();
+            setDataSource('image');
+            imageInputRef.current?.click();
+          }
+          break;
+        case 'b':
+          // B: open brush group load modal (only in render stage)
+          if (currentStage === 'render') {
+            e.preventDefault();
+            dbGetBrushGroups().then(groups => {
+              setBrushGroupsForLoad(groups);
+              setShowBrushGroupLoadModal(true);
+            });
+          }
+          break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onStageChange, currentStage, dataSource, stopWebcam]);
+  }, [onStageChange, currentStage, dataSource, stopWebcam, cameraStatus]);
 
   // Handle render stage restoration when switching back
   useEffect(() => {
