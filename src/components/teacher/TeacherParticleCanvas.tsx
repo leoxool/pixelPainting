@@ -549,10 +549,11 @@ export function TeacherParticleCanvas({
           // Get brush texture (use cached texture)
           const texture = getCachedTexture(level, brushLayers[level]);
 
-          // Calculate size with jitter (sizeJitter is 0-100, factor is 0.25-4.0)
+          // Calculate size with jitter (sizeJitter is 0-100, factor is 1.0-4.0)
+          // Only randomly enlarge, never shrink below base size
           const k = sizeJitter / 100; // 0-1
           const randSize = hash(j, i, 1);
-          const sizeFactor = 1.0 - k * 0.75 + randSize * k * 3.75;
+          const sizeFactor = 1.0 + randSize * k * 3.0;
           const size = BRUSH_TEXTURE_SIZE * sizeFactor;
 
           // Calculate rotation with jitter
@@ -622,7 +623,7 @@ export function TeacherParticleCanvas({
           // Update merged mesh: calculate size for the base position
           const k = sizeJitter / 100;
           const randSize = hash(meta.baseJ, meta.baseI, 1);
-          const sizeFactor = 1.0 - k * 0.75 + randSize * k * 3.75;
+          const sizeFactor = 1.0 + randSize * k * 3.0;
           const size = BRUSH_TEXTURE_SIZE * meta.mergedSize * sizeFactor;
 
           const randRot = hash(meta.baseJ, meta.baseI, 2);
@@ -640,7 +641,7 @@ export function TeacherParticleCanvas({
           // Single cell mesh - use baseJ from meta (j is not in scope here)
           const k = sizeJitter / 100;
           const randSize = hash(meta.baseJ, meta.baseI, 1);
-          const sizeFactor = 1.0 - k * 0.75 + randSize * k * 3.75;
+          const sizeFactor = 1.0 + randSize * k * 3.0;
           const size = BRUSH_TEXTURE_SIZE * sizeFactor;
 
           const randRot = hash(meta.baseJ, meta.baseI, 2);
@@ -666,9 +667,9 @@ export function TeacherParticleCanvas({
           const mesh = meshesRef.current[idx];
           if (!mesh) continue;
 
-          // Calculate new size with jitter
+          // Calculate new size with jitter (only enlarge, never shrink)
           const randSize = hash(j, i, 1);
-          const sizeFactor = 1.0 - k * 0.75 + randSize * k * 3.75;
+          const sizeFactor = 1.0 + randSize * k * 3.0;
           const size = BRUSH_TEXTURE_SIZE * sizeFactor;
 
           // Calculate new rotation
