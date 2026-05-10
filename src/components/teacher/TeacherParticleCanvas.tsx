@@ -167,8 +167,6 @@ export function TeacherParticleCanvas({
       }
     });
     meshesRef.current = [];
-    // Clear cellMeta to prevent stale references when meshes are rebuilt
-    delete (meshesRef.current as unknown as { cellMeta?: unknown }).cellMeta;
 
     // Clean up old textures
     texturesRef.current.forEach((tex) => tex.dispose());

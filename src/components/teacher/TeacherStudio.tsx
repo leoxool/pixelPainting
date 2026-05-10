@@ -170,6 +170,9 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   // 存储源图像数据用于持久化
   const sourceImageDataRef = useRef<ImageData | null>(null);
   const [sourceUpdateTrigger, setSourceUpdateTrigger] = useState(0);
+  // 保存渲染页面的数据源状态，用于切换后恢复
+  const lastDataSourceRef = useRef<'webcam' | 'image'>('webcam');
+  const lastImageUrlRef = useRef<string | null>(null);
 
   // 笔刷库：从 IndexedDB 加载
   const loadBrushPresets = useCallback(async () => {
@@ -1165,6 +1168,9 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
         setDataSource('image');
         setSourceResolution({ width: canvasWidth, height: canvasHeight });
         setSourceUpdateTrigger(t => t + 1);
+
+        // 保存图片 URL 用于页面切换后恢复
+        lastImageUrlRef.current = event.target?.result as string;
       };
       img.src = event.target?.result as string;
     };
@@ -1657,12 +1663,52 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
 
       switch (e.key.toLowerCase()) {
         case '1':
-          onStageChange('single');
-          break;
         case '2':
-          onStageChange('group');
+          // Save render stage state before leaving
+          if (currentStage === 'render') {
+            lastDataSourceRef.current = dataSource;
+            // Save image URL if currently showing an image
+            if (dataSource === 'image' && sourceImageDataRef.current) {
+              // We can't restore from ImageData easily, so just keep the reference
+              // The user will need to reload the image if they want to continue
+            }
+          }
+          onStageChange(e.key === '1' ? 'single' : 'group');
           break;
         case '3':
+          // Coming TO render stage - restore state if needed
+          if (currentStage !== 'render') {
+            // If we had an image loaded, restore it
+            if (lastDataSourceRef.current === 'image' && lastImageUrlRef.current) {
+              // Reload the image
+              const img = new Image();
+              img.onload = () => {
+                const canvas = sourceCanvasRef.current;
+                const ctx = sourceCtxRef.current;
+                if (!canvas || !ctx) return;
+                // We need to determine the aspect ratio from the saved image
+                const aspectRatio = img.width / img.height;
+                setSourceAspectRatio(aspectRatio);
+                let canvasWidth, canvasHeight;
+                if (aspectRatio >= 1) {
+                  canvasWidth = SOURCE_WIDTH;
+                  canvasHeight = Math.round(SOURCE_WIDTH / aspectRatio);
+                } else {
+                  canvasHeight = SOURCE_HEIGHT;
+                  canvasWidth = Math.round(SOURCE_HEIGHT * aspectRatio);
+                }
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvasWidth, canvasHeight);
+                sourceImageDataRef.current = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+                setDataSource('image');
+                setSourceResolution({ width: canvasWidth, height: canvasHeight });
+                setSourceUpdateTrigger(t => t + 1);
+              };
+              img.src = lastImageUrlRef.current;
+            }
+            // For webcam, we don't auto-restart - user must explicitly start it
+          }
           onStageChange('render');
           break;
         case 'f':
@@ -1672,7 +1718,18 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onStageChange]);
+  }, [onStageChange, currentStage, dataSource]);
+
+  // Handle render stage restoration when switching back
+  useEffect(() => {
+    if (currentStage === 'render') {
+      // If we have a saved webcam state, restore it
+      if (lastDataSourceRef.current === 'webcam' && !isWebcamActive && !lastImageUrlRef.current) {
+        // Only auto-start webcam if no image was loaded
+        // (we don't automatically restart webcam to avoid surprise)
+      }
+    }
+  }, [currentStage, isWebcamActive]);
 
   // Toggle floating panel based on stage
   useEffect(() => {
