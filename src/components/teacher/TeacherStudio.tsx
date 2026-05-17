@@ -11,6 +11,7 @@ import { BrushLayerGrid } from './BrushLayerGrid';
 import { BrushGroupEditor } from './BrushGroupEditor';
 import { DataSourcePanel } from './RenderOutput/DataSourcePanel';
 import { RenderOutputPanel } from './RenderOutput';
+import { AnimationStage } from './AnimationStage';
 import { getLevelGray, extractGridData, renderArt } from './gridUtils';
 import { getBrushPresets as dbGetBrushPresets, saveBrushPresets as dbSaveBrushPresets, deleteBrushPreset as dbDeleteBrushPreset, getBrushGroups as dbGetBrushGroups, saveBrushGroups as dbSaveBrushGroups, deleteBrushGroup as dbDeleteBrushGroup } from '@/lib/db';
 import { FloatingWindow } from './FloatingWindow';
@@ -21,7 +22,7 @@ import JSZip from 'jszip';
 
 type DataSource = 'webcam' | 'image';
 type BrushMode = 'draw' | 'erase';
-type Stage = 'single' | 'group' | 'render';
+type Stage = 'single' | 'group' | 'render' | 'animation';
 
 interface BrushLayer {
   canvas: HTMLCanvasElement;
@@ -135,6 +136,8 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   const [brushGroupSlots, setBrushGroupSlots] = useState<(BrushPreset | null)[]>(Array(10).fill(null));
   // 用于触发笔刷组列表更新
   const [brushGroupUpdateTrigger, setBrushGroupUpdateTrigger] = useState(0);
+  // 笔刷组列表 - 用于动画模块
+  const [animationBrushGroups, setAnimationBrushGroups] = useState<BrushGroup[]>([]);
 
   // Floating window visibility states
   const [showBrushLibraryPanel, setShowBrushLibraryPanel] = useState(true);
@@ -501,6 +504,15 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
   useEffect(() => {
     loadBrushPresets();
   }, [loadBrushPresets]);
+
+  // 加载笔刷组列表用于动画模块
+  useEffect(() => {
+    const loadGroups = async () => {
+      const groups = await dbGetBrushGroups();
+      setAnimationBrushGroups(groups);
+    };
+    loadGroups();
+  }, [brushGroupUpdateTrigger, currentStage]);
 
   // 更新摄像头 video ref
   useEffect(() => {
@@ -1724,6 +1736,14 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
           }
           onStageChange('render');
           break;
+        case '4':
+          // Animation stage
+          if (currentStage !== 'animation') {
+            // Stop render loop when entering animation stage
+            stopWebcam();
+          }
+          onStageChange('animation');
+          break;
         case 'f':
           setIsFullscreen(prev => !prev);
           break;
@@ -2124,6 +2144,14 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
               }}
             />
           </div>
+        )}
+
+        {/* Stage 4: Animation Output */}
+        {currentStage === 'animation' && (
+          <AnimationStage
+            brushGroups={animationBrushGroups}
+            brushPresets={brushPresets}
+          />
         )}
       </div>
 

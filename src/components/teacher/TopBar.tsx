@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-type Stage = 'single' | 'group' | 'render';
+type Stage = 'single' | 'group' | 'render' | 'animation';
 
 interface TopBarProps {
   currentStage: Stage;
@@ -24,6 +24,11 @@ const stageIcons: { stage: Stage; icon: string; title: string }[] = [
     stage: 'render',
     title: '渲染输出',
     icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+  },
+  {
+    stage: 'animation',
+    title: '动画输出',
+    icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.574z',
   },
 ];
 

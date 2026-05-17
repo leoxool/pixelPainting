@@ -2,6 +2,7 @@
 export const SOURCE_WIDTH = 400;
 export const SOURCE_HEIGHT = 400;
 export const BRUSH_SIZE = 200;
+export const BRUSH_TEXTURE_SIZE = 100; // Used in TeacherParticleCanvas
 
 // Grid layout constants for BrushGrid
 export const GRID_MIN_BRUSH_SIZE = 80;

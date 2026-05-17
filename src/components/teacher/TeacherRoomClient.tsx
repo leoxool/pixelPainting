@@ -25,7 +25,7 @@ interface TeacherRoomClientProps {
   onBrushGroupFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
-type Stage = 'single' | 'group' | 'render';
+type Stage = 'single' | 'group' | 'render' | 'animation';
 
 export function TeacherRoomClient({ room, assets: initialAssets, members = [], onBrushGroupFullscreenChange }: TeacherRoomClientProps) {
   const [assets, setAssets] = useState<Asset[]>(initialAssets);
