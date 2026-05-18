@@ -349,11 +349,13 @@ FORMATION type: reference index: 0 time: 19 duration: 3
             opacity: 1,
             metalness: 0,
             roughness: 1,
+            side: THREE.DoubleSide,
           })
         : new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
             opacity: 1,
+            side: THREE.DoubleSide,
           });
 
       const count = gridSizeX * gridSizeY;
