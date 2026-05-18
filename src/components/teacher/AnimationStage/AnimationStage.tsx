@@ -994,7 +994,7 @@ CAMERA_MODE mode: orbit time: 15
 
     // Process all commands and add to master timeline
     parsed.commands.forEach((cmd, index) => {
-      const cmdTime = cmd.time;
+      const cmdTime = cmd.time; // Use actual command time, not array index
       const duration = (cmd.params.duration as number) || 0;
 
       switch (cmd.type) {
@@ -1851,7 +1851,7 @@ CAMERA_MODE mode: orbit time: 15
                 }
               );
             }
-          }, index);
+          }, cmdTime);
           break;
         }
 
