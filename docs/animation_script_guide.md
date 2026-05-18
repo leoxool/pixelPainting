@@ -254,6 +254,30 @@ RANDOM_FOLLOW speed: 数值 radius: 数值 time: N duration: M
 RANDOM_FOLLOW speed: 0.5 radius: 300 time: 3 duration: 10
 ```
 
+### 3.9 RANDOM_ORBIT_BRUSH - 随机目标环绕
+
+```javascript
+RANDOM_ORBIT_BRUSH radius: 数值 speed: 数值 [height: 数值] [changeInterval: 数值] time: N duration: M
+```
+
+**参数说明:**
+
+| 参数 | 说明 |
+|------|------|
+| `radius` | 环绕半径 |
+| `speed` | 环绕速度 (弧度/秒) |
+| `height` | 高度偏移 (默认50) |
+| `changeInterval` | 目标切换间隔 (秒，默认2) |
+
+**示例:**
+```javascript
+# 相机环绕随机笔刷，每2秒切换目标
+RANDOM_ORBIT_BRUSH radius: 200 speed: 0.3 height: 50 changeInterval: 2 time: 0 duration: 8
+
+# 快速环绕
+RANDOM_ORBIT_BRUSH radius: 150 speed: 0.5 height: 30 changeInterval: 1 time: 5 duration: 5
+```
+
 ---
 
 ## 4. 灯光命令
@@ -452,7 +476,61 @@ BEZIER_FLIGHT cp1: {0,500,0} cp2: {500,-200,200} cp3: {1000,500,0} time: 3 durat
 
 ---
 
-## 6. 数组效果
+## 6. 单笔刷控制
+
+### 6.1 ROTATE_BRUSH - 单笔刷旋转
+
+```javascript
+ROTATE_BRUSH axis: x|y|z speed: 数值 [duration: 数值] time: N
+```
+
+**参数说明:**
+
+| 参数 | 说明 |
+|------|------|
+| `axis` | 旋转轴 (x/y/z) |
+| `speed` | 旋转速度 (度/秒) |
+| `duration` | 持续时间 (秒，默认3) |
+
+**示例:**
+```javascript
+# Z轴旋转
+ROTATE_BRUSH axis: z speed: 90 time: 2 duration: 3
+
+# Y轴旋转
+ROTATE_BRUSH axis: y speed: 120 time: 0 duration: 2
+
+# X轴旋转
+ROTATE_BRUSH axis: x speed: 60 time: 5 duration: 4
+```
+
+### 6.2 RANDOM_ROAM - 笔刷随机漫游
+
+```javascript
+RANDOM_ROAM speed: 数值 amplitude: 数值 [changeInterval: 数值] [duration: 数值] time: N
+```
+
+**参数说明:**
+
+| 参数 | 说明 |
+|------|------|
+| `speed` | 移动速度 |
+| `amplitude` | 漫游幅度 (离原始位置的最大偏移) |
+| `changeInterval` | 方向切换间隔 (秒，默认2) |
+| `duration` | 持续时间 (秒) |
+
+**示例:**
+```javascript
+# 缓慢漫游
+RANDOM_ROAM speed: 0.3 amplitude: 80 time: 0 duration: 6
+
+# 快速漫游
+RANDOM_ROAM speed: 0.8 amplitude: 120 changeInterval: 1.5 time: 3 duration: 5
+```
+
+---
+
+## 7. 数组效果
 
 ### 6.1 WAVE - 波浪效果
 
@@ -1043,6 +1121,7 @@ VIGNETTE darkness: 1.4 offset: 1.1 time: 26 duration: 2
 | `CAMERA_PATH` | 路径动画 |
 | `ORBIT_BRUSH` | 环绕笔刷 |
 | `RANDOM_FOLLOW` | 随机跟随 |
+| `RANDOM_ORBIT_BRUSH` | 随机目标环绕 |
 
 ### 灯光命令
 
@@ -1062,6 +1141,13 @@ VIGNETTE darkness: 1.4 offset: 1.1 time: 26 duration: 2
 | `AERIAL_DANCE` | 空中舞蹈 |
 | `ORBIT_AXIS` | 轴向环绕 |
 | `BEZIER_FLIGHT` | 贝塞尔飞行 |
+
+### 单笔刷控制
+
+| 命令 | 用途 |
+|------|------|
+| `ROTATE_BRUSH` | 单笔刷旋转 |
+| `RANDOM_ROAM` | 笔刷随机漫游 |
 
 ### 数组效果
 
@@ -1093,5 +1179,5 @@ VIGNETTE darkness: 1.4 offset: 1.1 time: 26 duration: 2
 
 ---
 
-*文档版本: 2.0*
+*文档版本: 2.1*
 *更新时间: 2026-05-18*

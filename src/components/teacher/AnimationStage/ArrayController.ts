@@ -41,21 +41,19 @@ export interface ArrayScaleConfig {
 }
 
 export class ArrayController {
-  private time: number = 0;
-
   // WAVE - Sinusoidal wave undulation across array
   applyWaveUndulation(
     brushes: AnimatedBrush[],
     config: WaveConfig,
-    deltaTime: number,
+    elapsedTime: number,
     onUpdate: (brush: AnimatedBrush, pos: Vector3, scale: number) => void
   ): void {
-    this.time += deltaTime;
+    const time = elapsedTime;
     const { direction, amplitude, frequency, speed } = config;
 
     brushes.forEach((brush, index) => {
       const wavePhase = (index / brushes.length) * Math.PI * 2 * frequency;
-      const waveOffset = Math.sin(wavePhase + this.time * speed * Math.PI * 2) * amplitude;
+      const waveOffset = Math.sin(wavePhase + time * speed * Math.PI * 2) * amplitude;
 
       let x = brush.targetPosition.x;
       let y = brush.targetPosition.y;
@@ -79,20 +77,20 @@ export class ArrayController {
   oscillateBrushes(
     brushes: AnimatedBrush[],
     config: OscillateConfig,
-    deltaTime: number,
+    elapsedTime: number,
     onUpdate: (brush: AnimatedBrush, pos: Vector3, scale: number) => void
   ): void {
-    this.time += deltaTime;
+    const time = elapsedTime;
     const { centerX, centerY, amplitudeX, amplitudeY, frequency, phase } = config;
 
     brushes.forEach((brush, index) => {
-      const offsetX = Math.cos(this.time * frequency * Math.PI * 2 + phase + index * 0.1) * amplitudeX;
-      const offsetY = Math.sin(this.time * frequency * Math.PI * 2 + phase + index * 0.1) * amplitudeY;
+      const offsetX = Math.cos(time * frequency * Math.PI * 2 + phase + index * 0.1) * amplitudeX;
+      const offsetY = Math.sin(time * frequency * Math.PI * 2 + phase + index * 0.1) * amplitudeY;
 
       onUpdate(brush, {
         x: centerX + offsetX,
         y: centerY + offsetY,
-        z: brush.targetPosition.z + Math.sin(this.time * 3 + index * 0.2) * 10,
+        z: brush.targetPosition.z + Math.sin(time * 3 + index * 0.2) * 10,
       }, 1);
     });
   }
@@ -101,15 +99,15 @@ export class ArrayController {
   pulseBrushes(
     brushes: AnimatedBrush[],
     config: PulseConfig,
-    deltaTime: number,
+    elapsedTime: number,
     onUpdate: (brush: AnimatedBrush, pos: Vector3, scale: number) => void
   ): void {
-    this.time += deltaTime;
+    const time = elapsedTime;
     const { centerX, centerY, minScale, maxScale, speed } = config;
 
     brushes.forEach((brush, index) => {
       const pulsePhase = (index / brushes.length) * Math.PI; // Stagger by position
-      const scaleValue = minScale + (maxScale - minScale) * Math.abs(Math.sin(this.time * speed * Math.PI * 2 + pulsePhase));
+      const scaleValue = minScale + (maxScale - minScale) * Math.abs(Math.sin(time * speed * Math.PI * 2 + pulsePhase));
 
       const offset = (scaleValue - 1) * 20;
       const angle = (index / brushes.length) * Math.PI * 2;
@@ -126,13 +124,13 @@ export class ArrayController {
   rotateArray(
     brushes: AnimatedBrush[],
     config: ArrayRotateConfig,
-    deltaTime: number,
+    elapsedTime: number,
     onUpdate: (brush: AnimatedBrush, pos: Vector3, scale: number) => void
   ): void {
-    this.time += deltaTime;
+    const time = elapsedTime;
     const { centerX, centerY, speed, direction = 'cw' } = config;
     const angleDirection = direction === 'cw' ? 1 : -1;
-    const angle = this.time * speed * Math.PI / 180 * angleDirection;
+    const angle = time * speed * Math.PI / 180 * angleDirection;
 
     brushes.forEach((brush) => {
       const dx = brush.targetPosition.x - centerX;
@@ -153,13 +151,13 @@ export class ArrayController {
   scaleArray(
     brushes: AnimatedBrush[],
     config: ArrayScaleConfig,
-    deltaTime: number,
+    elapsedTime: number,
     onUpdate: (brush: AnimatedBrush, pos: Vector3, scale: number) => void
   ): void {
-    this.time += deltaTime;
+    const time = elapsedTime;
     const { centerX, centerY, minScale, maxScale, speed } = config;
 
-    const scaleProgress = minScale + (maxScale - minScale) * Math.abs(Math.sin(this.time * speed * Math.PI));
+    const scaleProgress = minScale + (maxScale - minScale) * Math.abs(Math.sin(time * speed * Math.PI));
     const currentScale = scaleProgress;
 
     brushes.forEach((brush) => {
@@ -172,10 +170,6 @@ export class ArrayController {
         z: brush.targetPosition.z,
       }, 1);
     });
-  }
-
-  reset(): void {
-    this.time = 0;
   }
 
   dispose(): void {

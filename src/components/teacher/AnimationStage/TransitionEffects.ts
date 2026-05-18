@@ -1,5 +1,6 @@
 // TransitionEffects - Cinematic transition effects
 import * as THREE from 'three';
+import { gsap } from 'gsap';
 import { Vector3, AnimatedBrush } from './types';
 
 export interface ExplosionConfig {
@@ -38,8 +39,8 @@ export interface RackFocusConfig {
 
 export class TransitionEffects {
   private scene: THREE.Scene;
-  private time: number = 0;
   private flashOverlay: THREE.Mesh | null = null;
+  private activeAnimations: gsap.core.Tween[] = [];
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -119,57 +120,72 @@ export class TransitionEffects {
     });
   }
 
-  // COLOR_FLASH - Screen flash effect
-  flashColor(config: ColorFlashConfig, onComplete?: () => void): void {
+  // COLOR_FLASH - Screen flash effect (non-blocking, GSAP-driven)
+  flashColor(config: ColorFlashConfig): void {
     if (!this.flashOverlay) return;
 
     const { color, duration, intensity } = config;
     const material = this.flashOverlay.material as THREE.MeshBasicMaterial;
 
+    // Kill any existing animations on this overlay
+    this.activeAnimations.forEach(tween => tween.kill());
+    this.activeAnimations = [];
+
     // Parse color string to THREE.Color
     material.color.set(color);
     material.opacity = intensity;
 
-    // Animate opacity to 0
-    const startTime = performance.now();
-    const animate = () => {
-      const elapsed = (performance.now() - startTime) / 1000;
-      const remaining = 1 - elapsed / duration;
-
-      if (remaining > 0) {
-        material.opacity = intensity * remaining;
-        requestAnimationFrame(animate);
-      } else {
-        material.opacity = 0;
-        onComplete?.();
-      }
-    };
-    animate();
+    // Animate opacity to 0 using GSAP
+    const tween = gsap.to(material, {
+      opacity: 0,
+      duration: duration,
+      ease: 'power2.out',
+    });
+    this.activeAnimations.push(tween);
   }
 
-  // STROBE - Rapid flashing effect
-  strobe(config: StrobeConfig, onComplete?: () => void): void {
+  // Update method for COLOR_FLASH to be called from GSAP timeline
+  updateFlashColor(progress: number, config: ColorFlashConfig): void {
+    if (!this.flashOverlay) return;
+
+    const { color, intensity } = config;
+    const material = this.flashOverlay.material as THREE.MeshBasicMaterial;
+    material.color.set(color);
+    material.opacity = intensity * (1 - progress);
+  }
+
+  // STROBE - Rapid flashing effect (non-blocking, GSAP-driven)
+  strobe(config: StrobeConfig): void {
     if (!this.flashOverlay) return;
 
     const { color, frequency, duration } = config;
     const material = this.flashOverlay.material as THREE.MeshBasicMaterial;
+
+    // Kill any existing animations
+    this.activeAnimations.forEach(tween => tween.kill());
+    this.activeAnimations = [];
+
+    material.color.set(color);
+    material.opacity = 0.8;
+  }
+
+  // Update method for STROBE to be called from GSAP timeline
+  // Uses a simple on/off based on progress within each cycle
+  updateStrobe(progress: number, config: StrobeConfig): void {
+    if (!this.flashOverlay) return;
+
+    const { color, frequency } = config;
+    const material = this.flashOverlay.material as THREE.MeshBasicMaterial;
     material.color.set(color);
 
-    const interval = 1000 / frequency / 2; // on/off per flash
-    let remaining = duration * 1000;
-    let isOn = false;
+    // Calculate whether we're in an "on" or "off" phase
+    // Each flash cycle has 2 phases (on + off)
+    const cycleDuration = 1 / frequency;
+    const halfCycle = cycleDuration / 2;
+    const timeInCycle = (progress % cycleDuration);
 
-    const strobeInterval = setInterval(() => {
-      isOn = !isOn;
-      material.opacity = isOn ? 0.8 : 0;
-      remaining -= interval * 2;
-
-      if (remaining <= 0) {
-        clearInterval(strobeInterval);
-        material.opacity = 0;
-        onComplete?.();
-      }
-    }, interval);
+    // Turn on in first half of cycle, off in second half
+    material.opacity = timeInCycle < halfCycle ? 0.8 : 0;
   }
 
   // RACK_FOCUS - Smooth focus pull effect (handled by PostProcessing)
@@ -179,28 +195,29 @@ export class TransitionEffects {
     duration: number,
     onUpdate: (distance: number) => void
   ): void {
-    const startTime = performance.now();
+    const rackProxy = { progress: 0 };
 
-    const animate = () => {
-      const elapsed = (performance.now() - startTime) / 1000;
-      const progress = Math.min(1, elapsed / duration);
+    const tween = gsap.to(rackProxy, {
+      progress: 1,
+      duration: duration,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        // Ease in-out
+        const p = rackProxy.progress;
+        const eased = p < 0.5
+          ? 2 * p * p
+          : 1 - Math.pow(-2 * p + 2, 2) / 2;
 
-      // Ease in-out
-      const eased = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-      const currentDistance = startDistance + (endDistance - startDistance) * eased;
-      onUpdate(currentDistance);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    animate();
+        const currentDistance = startDistance + (endDistance - startDistance) * eased;
+        onUpdate(currentDistance);
+      },
+    });
+    this.activeAnimations.push(tween);
   }
 
   dispose(): void {
+    this.activeAnimations.forEach(tween => tween.kill());
+    this.activeAnimations = [];
     if (this.flashOverlay) {
       this.flashOverlay.geometry.dispose();
       (this.flashOverlay.material as THREE.Material).dispose();

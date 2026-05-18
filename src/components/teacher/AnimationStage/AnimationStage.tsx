@@ -1375,14 +1375,16 @@ CAMERA_MODE mode: orbit time: 15
         case 'SWIRL': {
           if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const swirlDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateSwirl = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / swirlDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: swirlDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!brushChoreographerRef.current || !dummyRef.current) return;
 
-              brushChoreographerRef.current?.swirlBrushes(
+              brushChoreographerRef.current.swirlBrushes(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1393,7 +1395,7 @@ CAMERA_MODE mode: orbit time: 15
                   waveAmplitude: 20,
                   waveFrequency: 2,
                 },
-                0.016,
+                progressProxy.t * swirlDuration,
                 (brush, pos) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1405,27 +1407,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateSwirl);
-              }
-            };
-            updateSwirl();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'AERIAL_DANCE': {
           if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const aerialDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateAerial = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / aerialDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: aerialDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!brushChoreographerRef.current || !dummyRef.current) return;
 
-              brushChoreographerRef.current?.aerialDance(
+              brushChoreographerRef.current.aerialDance(
                 brushes,
                 {
                   height: cmd.params.height as number || 100,
@@ -1433,7 +1432,7 @@ CAMERA_MODE mode: orbit time: 15
                   phase: cmd.params.phase as number || 0,
                   amplitude: cmd.params.amplitude as number || 30,
                 },
-                0.016,
+                progressProxy.t * aerialDuration,
                 (brush, pos) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1445,27 +1444,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateAerial);
-              }
-            };
-            updateAerial();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'ORBIT_AXIS': {
           if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const orbitDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateOrbit = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / orbitDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: orbitDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!brushChoreographerRef.current || !dummyRef.current) return;
 
-              brushChoreographerRef.current?.orbitAroundAxis(
+              brushChoreographerRef.current.orbitAroundAxis(
                 brushes,
                 {
                   axis: (cmd.params.axis as 'x' | 'y' | 'z') || 'y',
@@ -1473,7 +1469,7 @@ CAMERA_MODE mode: orbit time: 15
                   speed: cmd.params.speed as number || 0.3,
                   heightAmplitude: cmd.params.heightAmplitude as number || 50,
                 },
-                0.016,
+                progressProxy.t * orbitDuration,
                 (brush, pos) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1485,27 +1481,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateOrbit);
-              }
-            };
-            updateOrbit();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'BEZIER_FLIGHT': {
           if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const bezierDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            const startTime = performance.now();
-            const updateBezier = () => {
-              const elapsed = (performance.now() - startTime) / 1000;
-              const progress = Math.min(1, elapsed / bezierDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: bezierDuration,
+            ease: 'power2.inOut',
+            onUpdate: () => {
+              if (!brushChoreographerRef.current || !dummyRef.current) return;
 
-              brushChoreographerRef.current?.flyAlongBezier(
+              brushChoreographerRef.current.flyAlongBezier(
                 brushes,
                 {
                   controlPoints: [
@@ -1515,7 +1508,7 @@ CAMERA_MODE mode: orbit time: 15
                   ],
                   duration: bezierDuration,
                 },
-                progress,
+                progressProxy.t,
                 (brush, pos) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1527,27 +1520,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateBezier);
-              }
-            };
-            updateBezier();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'WAVE': {
           if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const waveDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateWave = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / waveDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: waveDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!arrayControllerRef.current || !dummyRef.current) return;
 
-              arrayControllerRef.current?.applyWaveUndulation(
+              arrayControllerRef.current.applyWaveUndulation(
                 brushes,
                 {
                   direction: (cmd.params.direction as 'x' | 'y' | 'diagonal') || 'y',
@@ -1555,7 +1545,7 @@ CAMERA_MODE mode: orbit time: 15
                   frequency: cmd.params.frequency as number || 2,
                   speed: cmd.params.speed as number || 0.5,
                 },
-                0.016,
+                progressProxy.t * waveDuration,
                 (brush, pos, scale) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1571,27 +1561,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateWave);
-              }
-            };
-            updateWave();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'OSCILLATE': {
           if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const oscillateDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateOscillate = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / oscillateDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: oscillateDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!arrayControllerRef.current || !dummyRef.current) return;
 
-              arrayControllerRef.current?.oscillateBrushes(
+              arrayControllerRef.current.oscillateBrushes(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1601,7 +1588,7 @@ CAMERA_MODE mode: orbit time: 15
                   frequency: cmd.params.frequency as number || 0.5,
                   phase: cmd.params.phase as number || 0,
                 },
-                0.016,
+                progressProxy.t * oscillateDuration,
                 (brush, pos, scale) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1617,27 +1604,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateOscillate);
-              }
-            };
-            updateOscillate();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'PULSE': {
           if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const pulseDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updatePulse = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / pulseDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: pulseDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!arrayControllerRef.current || !dummyRef.current) return;
 
-              arrayControllerRef.current?.pulseBrushes(
+              arrayControllerRef.current.pulseBrushes(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1646,7 +1630,7 @@ CAMERA_MODE mode: orbit time: 15
                   maxScale: cmd.params.maxScale as number || 1.5,
                   speed: cmd.params.speed as number || 1,
                 },
-                0.016,
+                progressProxy.t * pulseDuration,
                 (brush, pos, scale) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1662,27 +1646,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updatePulse);
-              }
-            };
-            updatePulse();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'ARRAY_ROTATE': {
           if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const rotateDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateRotate = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / rotateDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: rotateDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!arrayControllerRef.current || !dummyRef.current) return;
 
-              arrayControllerRef.current?.rotateArray(
+              arrayControllerRef.current.rotateArray(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1690,7 +1671,7 @@ CAMERA_MODE mode: orbit time: 15
                   speed: cmd.params.speed as number || 30,
                   direction: (cmd.params.direction as 'cw' | 'ccw') || 'cw',
                 },
-                0.016,
+                progressProxy.t * rotateDuration,
                 (brush, pos, scale) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1706,27 +1687,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateRotate);
-              }
-            };
-            updateRotate();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'ARRAY_SCALE': {
           if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
           const scaleDuration = (cmd.params.duration as number) || 3;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            let elapsed = 0;
-            const updateScale = () => {
-              elapsed += 0.016;
-              const progress = Math.min(1, elapsed / scaleDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: scaleDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!arrayControllerRef.current || !dummyRef.current) return;
 
-              arrayControllerRef.current?.scaleArray(
+              arrayControllerRef.current.scaleArray(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1735,7 +1713,7 @@ CAMERA_MODE mode: orbit time: 15
                   maxScale: cmd.params.maxScale as number || 1.5,
                   speed: cmd.params.speed as number || 0.5,
                 },
-                0.016,
+                progressProxy.t * scaleDuration,
                 (brush, pos, scale) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1751,13 +1729,8 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateScale);
-              }
-            };
-            updateScale();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
@@ -1786,6 +1759,97 @@ CAMERA_MODE mode: orbit time: 15
               cmd.params.radius as number || 300
             );
           }, [], index);
+          break;
+        }
+
+        case 'RANDOM_ORBIT_BRUSH': {
+          if (!cameraControllerRef.current) break;
+
+          masterTimeline.call(() => {
+            cameraControllerRef.current?.startRandomOrbitBrush(
+              brushes,
+              cmd.params.radius as number || 200,
+              cmd.params.speed as number || 0.3,
+              cmd.params.height as number || 50,
+              cmd.params.changeInterval as number || 2
+            );
+          }, [], index);
+          break;
+        }
+
+        case 'ROTATE_BRUSH': {
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const rotateDuration = (cmd.params.duration as number) || 3;
+          const rotateAxis = (cmd.params.axis as 'x' | 'y' | 'z') || 'z';
+          const rotateSpeed = (cmd.params.speed as number) || 90; // degrees per second
+          const progressProxy = { t: 0 };
+
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: rotateDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!brushChoreographerRef.current || !dummyRef.current) return;
+
+              const brush = brushes[0];
+              if (!brush) return;
+
+              const result = brushChoreographerRef.current.rotateBrush(brush, {
+                axis: rotateAxis,
+                anglePerSecond: rotateSpeed,
+                phase: 0,
+              }, progressProxy.t * rotateDuration);
+
+              const mesh = instancedMeshesRef.current[brush.level];
+              if (mesh && dummyRef.current) {
+                dummyRef.current.position.set(result.position.x, result.position.y, result.position.z);
+                dummyRef.current.rotation.set(result.rotation.x, result.rotation.y, result.rotation.z);
+                dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                dummyRef.current.updateMatrix();
+                mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                mesh.instanceMatrix.needsUpdate = true;
+              }
+            }
+          }, index);
+          break;
+        }
+
+        case 'RANDOM_ROAM': {
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const roamDuration = (cmd.params.duration as number) || 5;
+          const roamSpeed = (cmd.params.speed as number) || 0.5;
+          const roamAmplitude = (cmd.params.amplitude as number) || 100;
+          const roamChangeInterval = (cmd.params.changeInterval as number) || 2;
+          const progressProxy = { t: 0 };
+
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: roamDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!brushChoreographerRef.current || !dummyRef.current) return;
+
+              brushChoreographerRef.current.randomRoamBrushes(
+                brushes,
+                {
+                  speed: roamSpeed,
+                  amplitude: roamAmplitude,
+                  changeInterval: roamChangeInterval,
+                },
+                progressProxy.t * roamDuration,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+            }
+          }, index);
           break;
         }
 
@@ -1858,14 +1922,16 @@ CAMERA_MODE mode: orbit time: 15
         case 'EXPLOSION': {
           if (!transitionEffectsRef.current || brushes.length === 0 || !dummyRef.current) break;
           const explosionDuration = (cmd.params.duration as number) || 1;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            const startTime = performance.now();
-            const updateExplosion = () => {
-              const elapsed = (performance.now() - startTime) / 1000;
-              const progress = Math.min(1, elapsed / explosionDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: explosionDuration,
+            ease: 'power2.out',
+            onUpdate: () => {
+              if (!transitionEffectsRef.current || !dummyRef.current) return;
 
-              transitionEffectsRef.current?.explodeBrushes(
+              transitionEffectsRef.current.explodeBrushes(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1874,7 +1940,7 @@ CAMERA_MODE mode: orbit time: 15
                   speed: cmd.params.speed as number || 500,
                   duration: explosionDuration,
                 },
-                progress,
+                progressProxy.t,
                 (brush, pos) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1886,27 +1952,24 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateExplosion);
-              }
-            };
-            updateExplosion();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
         case 'IMPLOSION': {
           if (!transitionEffectsRef.current || brushes.length === 0 || !dummyRef.current) break;
           const implosionDuration = (cmd.params.duration as number) || 1;
+          const progressProxy = { t: 0 };
 
-          masterTimeline.call(() => {
-            const startTime = performance.now();
-            const updateImplosion = () => {
-              const elapsed = (performance.now() - startTime) / 1000;
-              const progress = Math.min(1, elapsed / implosionDuration);
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: implosionDuration,
+            ease: 'power2.in',
+            onUpdate: () => {
+              if (!transitionEffectsRef.current || !dummyRef.current) return;
 
-              transitionEffectsRef.current?.implodeBrushes(
+              transitionEffectsRef.current.implodeBrushes(
                 brushes,
                 {
                   centerX: cmd.params.centerX as number,
@@ -1915,7 +1978,7 @@ CAMERA_MODE mode: orbit time: 15
                   speed: cmd.params.speed as number || 500,
                   duration: implosionDuration,
                 },
-                progress,
+                progressProxy.t,
                 (brush, pos) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
@@ -1927,13 +1990,8 @@ CAMERA_MODE mode: orbit time: 15
                   }
                 }
               );
-
-              if (progress < 1) {
-                requestAnimationFrame(updateImplosion);
-              }
-            };
-            updateImplosion();
-          }, [], index);
+            }
+          }, index);
           break;
         }
 
@@ -1941,7 +1999,9 @@ CAMERA_MODE mode: orbit time: 15
           const flashColor = cmd.params.color as string;
           const flashDuration = cmd.params.duration as number || 0.5;
           const flashIntensity = cmd.params.intensity as number || 1;
+          const progressProxy = { t: 0 };
 
+          // Create the flash overlay at start
           masterTimeline.call(() => {
             transitionEffectsRef.current?.flashColor({
               color: flashColor,
@@ -1949,6 +2009,21 @@ CAMERA_MODE mode: orbit time: 15
               intensity: flashIntensity,
             });
           }, [], index);
+
+          // Also animate opacity from intensity to 0 using GSAP timeline
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: flashDuration,
+            ease: 'power2.out',
+            onUpdate: () => {
+              if (!transitionEffectsRef.current) return;
+              transitionEffectsRef.current.updateFlashColor(progressProxy.t, {
+                color: flashColor,
+                duration: flashDuration,
+                intensity: flashIntensity,
+              });
+            }
+          }, index);
           break;
         }
 
@@ -1956,7 +2031,9 @@ CAMERA_MODE mode: orbit time: 15
           const strobeColor = cmd.params.color as string;
           const strobeFrequency = cmd.params.frequency as number || 10;
           const strobeDuration = cmd.params.duration as number || 2;
+          const progressProxy = { t: 0 };
 
+          // Initialize the strobe
           masterTimeline.call(() => {
             transitionEffectsRef.current?.strobe({
               color: strobeColor,
@@ -1964,6 +2041,21 @@ CAMERA_MODE mode: orbit time: 15
               duration: strobeDuration,
             });
           }, [], index);
+
+          // Update strobe state based on GSAP progress
+          masterTimeline.to(progressProxy, {
+            t: 1,
+            duration: strobeDuration,
+            ease: 'linear',
+            onUpdate: () => {
+              if (!transitionEffectsRef.current) return;
+              transitionEffectsRef.current.updateStrobe(progressProxy.t, {
+                color: strobeColor,
+                frequency: strobeFrequency,
+                duration: strobeDuration,
+              });
+            }
+          }, index);
           break;
         }
 

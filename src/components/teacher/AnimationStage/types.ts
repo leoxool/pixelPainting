@@ -157,7 +157,13 @@ export type ExtendedCommandType =
   | 'IMPLOSION'
   | 'COLOR_FLASH'
   | 'STROBE'
-  | 'RACK_FOCUS';
+  | 'RACK_FOCUS'
+  // Single brush control
+  | 'ROTATE_BRUSH'
+  // Brush wandering
+  | 'RANDOM_ROAM'
+  // Camera orbit with random target switching
+  | 'RANDOM_ORBIT_BRUSH';
 
 export interface ExtendedCameraKeyFrame {
   time: number;

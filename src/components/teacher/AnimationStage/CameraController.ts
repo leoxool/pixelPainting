@@ -63,6 +63,16 @@ export class CameraController {
   private orbitConfig: CameraOrbitConfig | null = null;
   private orbitAngle: number = 0;  // Current angle in radians
 
+  // Random orbit brush mode
+  private isRandomOrbitMode: boolean = false;
+  private randomOrbitBrushes: AnimatedBrush[] = [];
+  private randomOrbitRadius: number = 200;
+  private randomOrbitSpeed: number = 0.3;
+  private randomOrbitHeight: number = 0;
+  private randomOrbitChangeInterval: number = 2; // seconds between target switches
+  private randomOrbitLastSwitch: number = 0;
+  private currentOrbitBrushIndex: number = 0;
+
   constructor(options: CameraControllerOptions) {
     this.camera = options.camera;
     this.mode = options.mode || 'fixed';
@@ -112,9 +122,55 @@ export class CameraController {
     if (this.mode === 'follow' && this.followTarget && brushPositions) {
       this.updateFollowMode(brushPositions, deltaTime);
     } else if (this.mode === 'orbit') {
-      this.updateOrbitMode(deltaTime);
+      if (this.isRandomOrbitMode) {
+        this.updateRandomOrbitMode(deltaTime, brushPositions);
+      } else {
+        this.updateOrbitMode(deltaTime);
+      }
     }
     // Fixed mode: camera stays where GSAP positioned it
+  }
+
+  private updateRandomOrbitMode(deltaTime: number, brushPositions?: Map<string, Vector3>) {
+    if (!this.isRandomOrbitMode || this.randomOrbitBrushes.length === 0) return;
+
+    const brushes = this.randomOrbitBrushes;
+    const currentBrush = brushes[this.currentOrbitBrushIndex];
+
+    // Get current brush position
+    let targetPos: Vector3;
+    if (brushPositions && brushPositions.has(currentBrush.id)) {
+      targetPos = brushPositions.get(currentBrush.id)!;
+    } else {
+      targetPos = currentBrush.targetPosition;
+    }
+
+    // Check if it's time to switch to a new target brush
+    this.randomOrbitLastSwitch += deltaTime;
+    if (this.randomOrbitLastSwitch >= this.randomOrbitChangeInterval) {
+      this.currentOrbitBrushIndex = Math.floor(Math.random() * brushes.length);
+      this.randomOrbitLastSwitch = 0;
+    }
+
+    // Update orbit angle
+    this.orbitAngle += this.randomOrbitSpeed * deltaTime;
+
+    // Calculate camera position on orbit circle around current brush
+    const x = targetPos.x + Math.cos(this.orbitAngle) * this.randomOrbitRadius;
+    const y = targetPos.y + this.randomOrbitHeight;
+    const z = targetPos.z + Math.sin(this.orbitAngle) * this.randomOrbitRadius;
+
+    // Smoothly interpolate camera position
+    const lerpFactor = 1 - Math.pow(0.001, deltaTime);
+    this.smoothPosition.x += (x - this.smoothPosition.x) * lerpFactor;
+    this.smoothPosition.y += (y - this.smoothPosition.y) * lerpFactor;
+    this.smoothPosition.z += (z - this.smoothPosition.z) * lerpFactor;
+
+    // Always look at the target brush position
+    this.smoothLookAt.set(targetPos.x, targetPos.y, targetPos.z);
+
+    this.camera.position.copy(this.smoothPosition);
+    this.camera.lookAt(this.smoothLookAt);
   }
 
   private updateFollowMode(brushPositions: Map<string, Vector3>, deltaTime: number) {
@@ -346,27 +402,41 @@ export class CameraController {
   startRandomFollow(brushes: AnimatedBrush[], brushPositions: Map<string, Vector3>, speed: number, radius: number, height: number = 0) {
     this.mode = 'follow';
     this.isAnimating = true;
-
-    // Random target selection interval
-    let lastTargetChange = 0;
-    const targetChangeInterval = 2; // Change target every 2 seconds
-
-    const updateRandomFollow = (deltaTime: number) => {
-      lastTargetChange += deltaTime;
-
-      if (lastTargetChange > targetChangeInterval) {
-        // Pick new random brush
-        const randomBrush = brushes[Math.floor(Math.random() * brushes.length)];
-        if (randomBrush) {
-          this.followTarget = {
-            brushId: randomBrush.id,
-            offset: { x: 0, y: height, z: radius },
-            lookAhead: 3,
-          };
-        }
-        lastTargetChange = 0;
-      }
+    this.followTarget = {
+      brushId: brushes[0]?.id || '',
+      offset: { x: 0, y: height, z: radius },
+      lookAhead: 3,
     };
+  }
+
+  // Start random orbit around brushes - camera orbits around a randomly selected brush, switching targets periodically
+  startRandomOrbitBrush(
+    brushes: AnimatedBrush[],
+    radius: number = 200,
+    speed: number = 0.3,
+    height: number = 0,
+    changeInterval: number = 2
+  ) {
+    if (brushes.length === 0) return;
+
+    this.mode = 'orbit';
+    this.isRandomOrbitMode = true;
+    this.randomOrbitBrushes = brushes;
+    this.randomOrbitRadius = radius;
+    this.randomOrbitSpeed = speed;
+    this.randomOrbitHeight = height;
+    this.randomOrbitChangeInterval = changeInterval;
+    this.randomOrbitLastSwitch = 0;
+    this.currentOrbitBrushIndex = Math.floor(Math.random() * brushes.length);
+    this.orbitAngle = 0;
+    this.isAnimating = true;
+  }
+
+  // Stop random orbit mode
+  stopRandomOrbit() {
+    this.isRandomOrbitMode = false;
+    this.mode = 'fixed';
+    this.isAnimating = false;
   }
 
   // Camera shake effect
