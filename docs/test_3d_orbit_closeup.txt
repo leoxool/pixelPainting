@@ -1,0 +1,20 @@
+# ═══════════════════════════════════════════════════════════
+# 摄影机随机笔刷立体环绕特写
+# 摄像机对随机笔刷目标进行三维球面环绕，完成一周后切换下一个目标，周而复始
+# ═══════════════════════════════════════════════════════════
+
+# 白色背景
+BACKGROUND_COLOR color: #ffffff time: 0
+
+# 摄像机初始位置 - 俯视整体
+CAMERA position: {500, 400, 1200} lookAt: {500, 400, 0} time: 0 fov: 60
+
+# 散开笔刷到随机位置
+BRUSH_FLIGHT duration: 2 scatter: 500 time: 0 direction: random
+
+# 笔刷随机漫游，每个笔刷有独立的三轴旋转
+RANDOM_ROAM speed: 0.3 amplitude: 120 changeInterval: 2 rotationSpeed: 1.0 time: 2
+
+# 摄像机三维立体环绕特写随机笔刷目标
+# radius: 60 (特写距离), speed: 1.5 (约4.2秒完成一周), height: 40 (环绕中心高度)
+RANDOM_ORBIT_BRUSH radius: 60 speed: 1.5 height: 40 time: 2
