@@ -429,8 +429,8 @@ FORMATION type: reference index: 0 time: 19 duration: 3
           cameraControllerRef.current.update(deltaTime, brushPositionsRef.current);
         }
 
-        // Camera follows grid center (position xy + lookAt)
-        if (cameraRef.current && gridCenterRef.current) {
+        // Camera follows grid center only when NOT in orbit mode
+        if (cameraRef.current && gridCenterRef.current && !cameraControllerRef.current?.isInRandomOrbitMode()) {
           const cam = cameraRef.current;
           const center = gridCenterRef.current;
           // Keep z position fixed, xy follows center
@@ -1772,8 +1772,7 @@ CAMERA_MODE mode: orbit time: 15
               brushes,
               cmd.params.radius as number || 200,
               cmd.params.speed as number || 0.3,
-              cmd.params.height as number || 50,
-              cmd.params.changeInterval as number || 2
+              cmd.params.height as number || 50
             );
           }, [], index);
           break;
@@ -1857,6 +1856,8 @@ CAMERA_MODE mode: orbit time: 15
                     dummyRef.current.updateMatrix();
                     mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
                     mesh.instanceMatrix.needsUpdate = true;
+                    // Update brush position for camera tracking
+                    brushPositionsRef.current.set(brush.id, pos);
                   }
                 }
               );

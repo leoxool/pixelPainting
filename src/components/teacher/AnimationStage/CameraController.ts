@@ -418,8 +418,7 @@ export class CameraController {
     brushes: AnimatedBrush[],
     radius: number = 200,
     speed: number = 0.3,
-    height: number = 0,
-    changeInterval: number = 2
+    height: number = 0
   ) {
     if (brushes.length === 0) return;
 
@@ -429,11 +428,14 @@ export class CameraController {
     this.randomOrbitRadius = radius;
     this.randomOrbitSpeed = speed;
     this.randomOrbitHeight = height;
-    this.randomOrbitChangeInterval = changeInterval;
-    this.randomOrbitLastSwitch = 0;
     this.currentOrbitBrushIndex = Math.floor(Math.random() * brushes.length);
     this.orbitAngle = 0;
     this.isAnimating = true;
+  }
+
+  // Check if camera is in random orbit mode
+  isInRandomOrbitMode(): boolean {
+    return this.isRandomOrbitMode;
   }
 
   // Stop random orbit mode
