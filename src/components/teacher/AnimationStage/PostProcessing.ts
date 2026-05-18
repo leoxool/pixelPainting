@@ -227,6 +227,20 @@ export class PostProcessing {
     });
   }
 
+  // Rack focus - smooth focus pull from one distance to another
+  rackFocus(startDistance: number, endDistance: number, duration: number = 1) {
+    const proxy = { distance: startDistance };
+
+    gsap.to(proxy, {
+      distance: endDistance,
+      duration,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        this.setFocusDistance(proxy.distance);
+      },
+    });
+  }
+
   // Update composer size (call on resize)
   setSize(width: number, height: number) {
     this.composer.setSize(width, height);

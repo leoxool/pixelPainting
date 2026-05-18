@@ -115,6 +115,62 @@ export type ScriptCommandType =
   | 'WAIT'
   | 'MARKER';
 
+// Extended command types for advanced animations
+export type ExtendedCommandType =
+  | ScriptCommandType
+  | 'CAMERA_FOLLOW'
+  | 'CAMERA_MODE'
+  | 'CAMERA_ORBIT'
+  | 'LIGHT_INTENSITY'
+  | 'LIGHT_COLOR'
+  | 'LIGHT_POSITION'
+  | 'MOVE_BRUSH'
+  | 'FORMATION'
+  | 'SCATTER'
+  | 'DOF_FOCUS'
+  | 'DOF_BLUR'
+  | 'VIGNETTE'
+  | 'MATERIAL_OPACITY'
+  | 'MATERIAL_EMISSIVE'
+  // Brush animation forms
+  | 'SWIRL'
+  | 'AERIAL_DANCE'
+  | 'ORBIT_AXIS'
+  | 'BEZIER_FLIGHT'
+  // Array control
+  | 'WAVE'
+  | 'OSCILLATE'
+  | 'PULSE'
+  | 'ARRAY_ROTATE'
+  | 'ARRAY_SCALE'
+  // Enhanced camera
+  | 'ORBIT_BRUSH'
+  | 'RANDOM_FOLLOW'
+  | 'CAMERA_SHAKE'
+  | 'CAMERA_PATH'
+  // Environment
+  | 'BACKGROUND_COLOR'
+  | 'FOG'
+  | 'SPOT_LIGHT'
+  // Cinematic transitions
+  | 'EXPLOSION'
+  | 'IMPLOSION'
+  | 'COLOR_FLASH'
+  | 'STROBE'
+  | 'RACK_FOCUS';
+
+export interface ExtendedCameraKeyFrame {
+  time: number;
+  position: Vector3;
+  lookAt: Vector3;
+  fov?: number;
+  transition?: 'ease-in-out' | 'linear' | 'bounce' | 'elastic';
+}
+
+export type BrushFormationType = 'swirl' | 'aerial' | 'orbit' | 'bezier';
+export type ArrayEffectMode = 'wave' | 'oscillate' | 'pulse' | 'rotate' | 'scale';
+export type TransitionEffectType = 'explosion' | 'implosion' | 'flash' | 'strobe' | 'rackFocus';
+
 export interface ScriptCommand {
   type: ScriptCommandType;
   time: number;

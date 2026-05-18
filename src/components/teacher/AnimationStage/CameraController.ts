@@ -1,7 +1,7 @@
 // Camera Controller - Perspective camera with path following and FOV animation
 import * as THREE from 'three';
 import { gsap } from 'gsap';
-import { Vector3, CameraKeyFrame } from './types';
+import { Vector3, CameraKeyFrame, AnimatedBrush } from './types';
 
 export type CameraMode = 'fixed' | 'follow' | 'orbit';
 
@@ -328,5 +328,140 @@ export class CameraController {
       },
       fov: this.camera instanceof THREE.PerspectiveCamera ? this.camera.fov : 60,
     };
+  }
+
+  // Orbit around a specific brush
+  orbitAroundBrush(brushId: string, radius: number, speed: number, height: number = 0) {
+    this.mode = 'orbit';
+    this.orbitConfig = {
+      center: { x: 0, y: 0, z: 0 },
+      radius,
+      speed,
+      height,
+    };
+    this.isAnimating = true;
+  }
+
+  // Start random follow mode
+  startRandomFollow(brushes: AnimatedBrush[], brushPositions: Map<string, Vector3>, speed: number, radius: number, height: number = 0) {
+    this.mode = 'follow';
+    this.isAnimating = true;
+
+    // Random target selection interval
+    let lastTargetChange = 0;
+    const targetChangeInterval = 2; // Change target every 2 seconds
+
+    const updateRandomFollow = (deltaTime: number) => {
+      lastTargetChange += deltaTime;
+
+      if (lastTargetChange > targetChangeInterval) {
+        // Pick new random brush
+        const randomBrush = brushes[Math.floor(Math.random() * brushes.length)];
+        if (randomBrush) {
+          this.followTarget = {
+            brushId: randomBrush.id,
+            offset: { x: 0, y: height, z: radius },
+            lookAhead: 3,
+          };
+        }
+        lastTargetChange = 0;
+      }
+    };
+  }
+
+  // Camera shake effect
+  shakeCamera(intensity: number, frequency: number, duration: number) {
+    const startTime = performance.now();
+    const originalPosition = this.camera.position.clone();
+    const shakeIntensity = intensity;
+    const shakeFrequency = frequency;
+
+    const shake = () => {
+      const elapsed = (performance.now() - startTime) / 1000;
+
+      if (elapsed < duration) {
+        const decay = 1 - elapsed / duration; // Fade out
+        const offsetX = Math.sin(elapsed * shakeFrequency * Math.PI * 2) * shakeIntensity * decay;
+        const offsetY = Math.cos(elapsed * shakeFrequency * Math.PI * 2 * 1.3) * shakeIntensity * decay;
+
+        this.camera.position.x = originalPosition.x + offsetX;
+        this.camera.position.y = originalPosition.y + offsetY;
+
+        requestAnimationFrame(shake);
+      } else {
+        // Restore original position
+        this.camera.position.copy(originalPosition);
+      }
+    };
+
+    requestAnimationFrame(shake);
+  }
+
+  // Play extended keyframes with custom positions
+  playExtendedKeyFrames(keyFrames: Array<{ time: number; position: Vector3; lookAt: Vector3; fov?: number }>) {
+    this.stop();
+
+    const totalDuration = keyFrames[keyFrames.length - 1].time;
+
+    const tl = gsap.timeline({
+      onUpdate: () => {
+        const currentTime = tl.time();
+        this.updateFromExtendedKeyFrames(currentTime, keyFrames);
+      },
+      onComplete: () => {
+        this.isAnimating = false;
+      },
+    });
+
+    // Add segments between keyframes
+    for (let i = 0; i < keyFrames.length - 1; i++) {
+      const currentKF = keyFrames[i];
+      const nextKF = keyFrames[i + 1];
+      const segmentDuration = nextKF.time - currentKF.time;
+
+      tl.to({}, { duration: segmentDuration }, currentKF.time);
+    }
+
+    tl.seek(0);
+    this.animationRef = tl;
+    this.isAnimating = true;
+    tl.play();
+  }
+
+  private updateFromExtendedKeyFrames(currentTime: number, keyFrames: Array<{ time: number; position: Vector3; lookAt: Vector3; fov?: number }>) {
+    let currentKF: typeof keyFrames[0] | null = null;
+    let nextKF: typeof keyFrames[0] | null = null;
+
+    for (let i = 0; i < keyFrames.length; i++) {
+      if (currentTime >= keyFrames[i].time) {
+        currentKF = keyFrames[i];
+        nextKF = keyFrames[i + 1] || null;
+      }
+    }
+
+    if (currentKF && nextKF) {
+      const segmentDuration = nextKF.time - currentKF.time;
+      const segmentProgress = segmentDuration > 0 ? (currentTime - currentKF.time) / segmentDuration : 0;
+      const easedProgress = this.easeInOut(segmentProgress);
+
+      // Interpolate position
+      const newPosition = this.lerpVector3(currentKF.position, nextKF.position, easedProgress);
+      const newLookAt = this.lerpVector3(currentKF.lookAt, nextKF.lookAt, easedProgress);
+
+      this.camera.position.set(newPosition.x, newPosition.y, newPosition.z);
+      this.camera.lookAt(newLookAt.x, newLookAt.y, newLookAt.z);
+
+      // Interpolate FOV if both keyframes have it
+      if (currentKF.fov !== undefined && nextKF.fov !== undefined && this.camera instanceof THREE.PerspectiveCamera) {
+        const perspCamera = this.camera;
+        const newFov = currentKF.fov + (nextKF.fov - currentKF.fov) * easedProgress;
+        perspCamera.fov = newFov;
+        perspCamera.updateProjectionMatrix();
+      }
+    }
+  }
+
+  private easeInOut(t: number): number {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   }
 }

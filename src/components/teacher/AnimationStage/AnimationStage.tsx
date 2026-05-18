@@ -13,6 +13,9 @@ import { MaterialSystem } from './MaterialSystem';
 import { MovementController, FormationConfig } from './MovementController';
 import { PostProcessing } from './PostProcessing';
 import { TimelineSynchronizer } from './TimelineSynchronizer';
+import { BrushChoreographer } from './BrushChoreographer';
+import { ArrayController } from './ArrayController';
+import { TransitionEffects } from './TransitionEffects';
 import {
   AnimatedBrush,
   AnimationStageState,
@@ -91,6 +94,9 @@ export function AnimationStage({
   const movementControllerRef = useRef<MovementController | null>(null);
   const postProcessingRef = useRef<PostProcessing | null>(null);
   const timelineSyncerRef = useRef<TimelineSynchronizer | null>(null);
+  const brushChoreographerRef = useRef<BrushChoreographer | null>(null);
+  const arrayControllerRef = useRef<ArrayController | null>(null);
+  const transitionEffectsRef = useRef<TransitionEffects | null>(null);
 
   // Brush positions for camera tracking
   const brushPositionsRef = useRef<Map<string, Vector3>>(new Map());
@@ -281,6 +287,18 @@ FORMATION type: reference index: 0 time: 19 duration: 3
     const timelineSyncer = new TimelineSynchronizer({ bpm: 120 });
     timelineSyncerRef.current = timelineSyncer;
 
+    // Initialize Brush Choreographer (brush animation forms)
+    const brushChoreographer = new BrushChoreographer(scene);
+    brushChoreographerRef.current = brushChoreographer;
+
+    // Initialize Array Controller (array-level effects)
+    const arrayController = new ArrayController();
+    arrayControllerRef.current = arrayController;
+
+    // Initialize Transition Effects (cinematic transitions)
+    const transitionEffects = new TransitionEffects(scene);
+    transitionEffectsRef.current = transitionEffects;
+
     // Calculate brush size and spacing - brushes touch each other, grid centered
     // Calculate brush size to fit grid properly
     const brushSize = Math.min(width / gridSizeX, height / gridSizeY);
@@ -444,6 +462,9 @@ FORMATION type: reference index: 0 time: 19 duration: 3
       movementControllerRef.current?.dispose();
       postProcessingRef.current?.dispose();
       timelineSyncerRef.current?.dispose();
+      brushChoreographerRef.current?.dispose();
+      arrayControllerRef.current?.dispose();
+      transitionEffectsRef.current?.dispose();
       // Reset init flag so next init can happen with new grid size
       isInitializedRef.current = false;
     };
@@ -1347,6 +1368,614 @@ CAMERA_MODE mode: orbit time: 15
           masterTimeline.call(() => {
             postProcessingRef.current?.setVignetteEnabled(true);
             postProcessingRef.current?.animateVignette(darkness, offset, vignetteDuration);
+          }, [], index);
+          break;
+        }
+
+        case 'SWIRL': {
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const swirlDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateSwirl = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / swirlDuration);
+
+              brushChoreographerRef.current?.swirlBrushes(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  radius: cmd.params.radius as number,
+                  speed: cmd.params.speed as number,
+                  direction: (cmd.params.direction as 'cw' | 'ccw') || 'cw',
+                  waveAmplitude: 20,
+                  waveFrequency: 2,
+                },
+                0.016,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateSwirl);
+              }
+            };
+            updateSwirl();
+          }, [], index);
+          break;
+        }
+
+        case 'AERIAL_DANCE': {
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const aerialDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateAerial = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / aerialDuration);
+
+              brushChoreographerRef.current?.aerialDance(
+                brushes,
+                {
+                  height: cmd.params.height as number || 100,
+                  frequency: cmd.params.frequency as number || 0.5,
+                  phase: cmd.params.phase as number || 0,
+                  amplitude: cmd.params.amplitude as number || 30,
+                },
+                0.016,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateAerial);
+              }
+            };
+            updateAerial();
+          }, [], index);
+          break;
+        }
+
+        case 'ORBIT_AXIS': {
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const orbitDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateOrbit = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / orbitDuration);
+
+              brushChoreographerRef.current?.orbitAroundAxis(
+                brushes,
+                {
+                  axis: (cmd.params.axis as 'x' | 'y' | 'z') || 'y',
+                  radius: cmd.params.radius as number || 200,
+                  speed: cmd.params.speed as number || 0.3,
+                  heightAmplitude: cmd.params.heightAmplitude as number || 50,
+                },
+                0.016,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateOrbit);
+              }
+            };
+            updateOrbit();
+          }, [], index);
+          break;
+        }
+
+        case 'BEZIER_FLIGHT': {
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const bezierDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            const startTime = performance.now();
+            const updateBezier = () => {
+              const elapsed = (performance.now() - startTime) / 1000;
+              const progress = Math.min(1, elapsed / bezierDuration);
+
+              brushChoreographerRef.current?.flyAlongBezier(
+                brushes,
+                {
+                  controlPoints: [
+                    cmd.params.cp1 as Vector3,
+                    cmd.params.cp2 as Vector3,
+                    cmd.params.cp3 as Vector3,
+                  ],
+                  duration: bezierDuration,
+                },
+                progress,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateBezier);
+              }
+            };
+            updateBezier();
+          }, [], index);
+          break;
+        }
+
+        case 'WAVE': {
+          if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const waveDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateWave = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / waveDuration);
+
+              arrayControllerRef.current?.applyWaveUndulation(
+                brushes,
+                {
+                  direction: (cmd.params.direction as 'x' | 'y' | 'diagonal') || 'y',
+                  amplitude: cmd.params.amplitude as number || 50,
+                  frequency: cmd.params.frequency as number || 2,
+                  speed: cmd.params.speed as number || 0.5,
+                },
+                0.016,
+                (brush, pos, scale) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(
+                      brushSizeXYRef.current.x * scale,
+                      brushSizeXYRef.current.y * scale,
+                      1
+                    );
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateWave);
+              }
+            };
+            updateWave();
+          }, [], index);
+          break;
+        }
+
+        case 'OSCILLATE': {
+          if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const oscillateDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateOscillate = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / oscillateDuration);
+
+              arrayControllerRef.current?.oscillateBrushes(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  amplitudeX: cmd.params.amplitudeX as number || 100,
+                  amplitudeY: cmd.params.amplitudeY as number || 50,
+                  frequency: cmd.params.frequency as number || 0.5,
+                  phase: cmd.params.phase as number || 0,
+                },
+                0.016,
+                (brush, pos, scale) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(
+                      brushSizeXYRef.current.x * scale,
+                      brushSizeXYRef.current.y * scale,
+                      1
+                    );
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateOscillate);
+              }
+            };
+            updateOscillate();
+          }, [], index);
+          break;
+        }
+
+        case 'PULSE': {
+          if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const pulseDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updatePulse = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / pulseDuration);
+
+              arrayControllerRef.current?.pulseBrushes(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  minScale: cmd.params.minScale as number || 0.5,
+                  maxScale: cmd.params.maxScale as number || 1.5,
+                  speed: cmd.params.speed as number || 1,
+                },
+                0.016,
+                (brush, pos, scale) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(
+                      brushSizeXYRef.current.x * scale,
+                      brushSizeXYRef.current.y * scale,
+                      1
+                    );
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updatePulse);
+              }
+            };
+            updatePulse();
+          }, [], index);
+          break;
+        }
+
+        case 'ARRAY_ROTATE': {
+          if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const rotateDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateRotate = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / rotateDuration);
+
+              arrayControllerRef.current?.rotateArray(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  speed: cmd.params.speed as number || 30,
+                  direction: (cmd.params.direction as 'cw' | 'ccw') || 'cw',
+                },
+                0.016,
+                (brush, pos, scale) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(
+                      brushSizeXYRef.current.x * scale,
+                      brushSizeXYRef.current.y * scale,
+                      1
+                    );
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateRotate);
+              }
+            };
+            updateRotate();
+          }, [], index);
+          break;
+        }
+
+        case 'ARRAY_SCALE': {
+          if (!arrayControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const scaleDuration = (cmd.params.duration as number) || 3;
+
+          masterTimeline.call(() => {
+            let elapsed = 0;
+            const updateScale = () => {
+              elapsed += 0.016;
+              const progress = Math.min(1, elapsed / scaleDuration);
+
+              arrayControllerRef.current?.scaleArray(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  minScale: cmd.params.minScale as number || 0.5,
+                  maxScale: cmd.params.maxScale as number || 1.5,
+                  speed: cmd.params.speed as number || 0.5,
+                },
+                0.016,
+                (brush, pos, scale) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(
+                      brushSizeXYRef.current.x * scale,
+                      brushSizeXYRef.current.y * scale,
+                      1
+                    );
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateScale);
+              }
+            };
+            updateScale();
+          }, [], index);
+          break;
+        }
+
+        case 'ORBIT_BRUSH': {
+          if (!cameraControllerRef.current) break;
+
+          masterTimeline.call(() => {
+            cameraControllerRef.current?.orbitAroundBrush(
+              cmd.params.brushId as string,
+              cmd.params.radius as number || 200,
+              cmd.params.speed as number || 0.1,
+              cmd.params.height as number || 0
+            );
+          }, [], index);
+          break;
+        }
+
+        case 'RANDOM_FOLLOW': {
+          if (!cameraControllerRef.current) break;
+
+          masterTimeline.call(() => {
+            cameraControllerRef.current?.startRandomFollow(
+              brushes,
+              brushPositionsRef.current,
+              cmd.params.speed as number || 0.5,
+              cmd.params.radius as number || 300
+            );
+          }, [], index);
+          break;
+        }
+
+        case 'CAMERA_SHAKE': {
+          if (!cameraControllerRef.current) break;
+          const shakeIntensity = cmd.params.intensity as number || 10;
+          const shakeFrequency = cmd.params.frequency as number || 5;
+          const shakeDuration = cmd.params.duration as number || 0.5;
+
+          masterTimeline.call(() => {
+            cameraControllerRef.current?.shakeCamera(shakeIntensity, shakeFrequency, shakeDuration);
+          }, [], index);
+          break;
+        }
+
+        case 'CAMERA_PATH': {
+          if (!cameraControllerRef.current) break;
+          const pathDuration = (cmd.params.duration as number) || 5;
+          const points = cmd.params.points as Vector3[];
+
+          masterTimeline.call(() => {
+            cameraControllerRef.current?.playExtendedKeyFrames(
+              points.map((p, i) => ({
+                time: (i / (points.length - 1)) * pathDuration,
+                position: p,
+                lookAt: { x: 0, y: 0, z: 0 },
+              }))
+            );
+          }, [], index);
+          break;
+        }
+
+        case 'BACKGROUND_COLOR': {
+          const bgDuration = (cmd.params.duration as number) || 2;
+          const bgColor = cmd.params.color as string;
+
+          masterTimeline.call(() => {
+            lightSystemRef.current?.animateBackgroundColor(bgColor, bgDuration);
+          }, [], index);
+          break;
+        }
+
+        case 'FOG': {
+          const fogDuration = (cmd.params.duration as number) || 2;
+
+          masterTimeline.call(() => {
+            lightSystemRef.current?.animateFog(
+              cmd.params.near as number,
+              cmd.params.far as number,
+              cmd.params.color as string,
+              fogDuration
+            );
+          }, [], index);
+          break;
+        }
+
+        case 'SPOT_LIGHT': {
+          masterTimeline.call(() => {
+            lightSystemRef.current?.createSpotLight(
+              cmd.params.position as Vector3,
+              cmd.params.target as Vector3,
+              cmd.params.intensity as number || 1,
+              cmd.params.angle as number || 0.5,
+              cmd.params.penumbra as number || 0.3
+            );
+          }, [], index);
+          break;
+        }
+
+        case 'EXPLOSION': {
+          if (!transitionEffectsRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const explosionDuration = (cmd.params.duration as number) || 1;
+
+          masterTimeline.call(() => {
+            const startTime = performance.now();
+            const updateExplosion = () => {
+              const elapsed = (performance.now() - startTime) / 1000;
+              const progress = Math.min(1, elapsed / explosionDuration);
+
+              transitionEffectsRef.current?.explodeBrushes(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  centerZ: cmd.params.centerZ as number || 0,
+                  speed: cmd.params.speed as number || 500,
+                  duration: explosionDuration,
+                },
+                progress,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateExplosion);
+              }
+            };
+            updateExplosion();
+          }, [], index);
+          break;
+        }
+
+        case 'IMPLOSION': {
+          if (!transitionEffectsRef.current || brushes.length === 0 || !dummyRef.current) break;
+          const implosionDuration = (cmd.params.duration as number) || 1;
+
+          masterTimeline.call(() => {
+            const startTime = performance.now();
+            const updateImplosion = () => {
+              const elapsed = (performance.now() - startTime) / 1000;
+              const progress = Math.min(1, elapsed / implosionDuration);
+
+              transitionEffectsRef.current?.implodeBrushes(
+                brushes,
+                {
+                  centerX: cmd.params.centerX as number,
+                  centerY: cmd.params.centerY as number,
+                  centerZ: cmd.params.centerZ as number || 0,
+                  speed: cmd.params.speed as number || 500,
+                  duration: implosionDuration,
+                },
+                progress,
+                (brush, pos) => {
+                  const mesh = instancedMeshesRef.current[brush.level];
+                  if (mesh && dummyRef.current) {
+                    dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.updateMatrix();
+                    mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                    mesh.instanceMatrix.needsUpdate = true;
+                  }
+                }
+              );
+
+              if (progress < 1) {
+                requestAnimationFrame(updateImplosion);
+              }
+            };
+            updateImplosion();
+          }, [], index);
+          break;
+        }
+
+        case 'COLOR_FLASH': {
+          const flashColor = cmd.params.color as string;
+          const flashDuration = cmd.params.duration as number || 0.5;
+          const flashIntensity = cmd.params.intensity as number || 1;
+
+          masterTimeline.call(() => {
+            transitionEffectsRef.current?.flashColor({
+              color: flashColor,
+              duration: flashDuration,
+              intensity: flashIntensity,
+            });
+          }, [], index);
+          break;
+        }
+
+        case 'STROBE': {
+          const strobeColor = cmd.params.color as string;
+          const strobeFrequency = cmd.params.frequency as number || 10;
+          const strobeDuration = cmd.params.duration as number || 2;
+
+          masterTimeline.call(() => {
+            transitionEffectsRef.current?.strobe({
+              color: strobeColor,
+              frequency: strobeFrequency,
+              duration: strobeDuration,
+            });
+          }, [], index);
+          break;
+        }
+
+        case 'RACK_FOCUS': {
+          const rackDuration = (cmd.params.duration as number) || 1;
+          const startDist = cmd.params.startDistance as number || 0.1;
+          const endDist = cmd.params.endDistance as number || 1;
+
+          masterTimeline.call(() => {
+            transitionEffectsRef.current?.rackFocus(startDist, endDist, rackDuration, (distance) => {
+              postProcessingRef.current?.animateFocusDistance(distance, 0.016);
+            });
           }, [], index);
           break;
         }

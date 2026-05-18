@@ -1,23 +1,7 @@
 // Advanced Script Parser - Extended DSL for camera, lights, movement
-import { ScriptCommand, ScriptCommandType, ParsedAnimationScript, Vector3 } from './types';
+import { ScriptCommand, ScriptCommandType, ParsedAnimationScript, Vector3, ExtendedCommandType } from './types';
 
-// Extended command types
-export type ExtendedCommandType =
-  | ScriptCommandType
-  | 'CAMERA_FOLLOW'
-  | 'CAMERA_MODE'
-  | 'CAMERA_ORBIT'
-  | 'LIGHT_INTENSITY'
-  | 'LIGHT_COLOR'
-  | 'LIGHT_POSITION'
-  | 'MOVE_BRUSH'
-  | 'FORMATION'
-  | 'SCATTER'
-  | 'DOF_FOCUS'
-  | 'DOF_BLUR'
-  | 'VIGNETTE'
-  | 'MATERIAL_OPACITY'
-  | 'MATERIAL_EMISSIVE';
+export type { ExtendedCommandType };
 
 export interface ExtendedScriptCommand {
   type: ExtendedCommandType;
@@ -204,6 +188,379 @@ function parseExtendedLine(line: string): ExtendedScriptCommand | null {
         formationType: 'reference',
         refIndex: parseInt(refFormationMatch[2]),
         duration: parseFloat(refFormationMatch[5] || '3'),
+      },
+    };
+  }
+
+  // SWIRL: SWIRL centerX: 500 centerY: 400 radius: 300 speed: 0.5 direction: cw time: 0 duration: 3
+  const swirlMatch = line.match(
+    /^SWIRL\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)\s+radius:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+direction:\s*(\w+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (swirlMatch) {
+    return {
+      type: 'SWIRL',
+      time: parseFloat(swirlMatch[8] || '0'),
+      params: {
+        centerX: parseFloat(swirlMatch[1]),
+        centerY: parseFloat(swirlMatch[2]),
+        radius: parseFloat(swirlMatch[3]),
+        speed: parseFloat(swirlMatch[4]),
+        direction: swirlMatch[6] || 'cw',
+        duration: parseFloat(swirlMatch[10] || '3'),
+      },
+    };
+  }
+
+  // AERIAL_DANCE: AERIAL_DANCE height: 100 frequency: 0.5 phase: 0 amplitude: 30 time: 0 duration: 3
+  const aerialMatch = line.match(
+    /^AERIAL_DANCE\s+height:\s*([\d.]+)\s+frequency:\s*([\d.]+)\s+phase:\s*([\d.]+)(\s+amplitude:\s*([\d.]+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (aerialMatch) {
+    return {
+      type: 'AERIAL_DANCE',
+      time: parseFloat(aerialMatch[7] || '0'),
+      params: {
+        height: parseFloat(aerialMatch[1]),
+        frequency: parseFloat(aerialMatch[2]),
+        phase: parseFloat(aerialMatch[3]),
+        amplitude: parseFloat(aerialMatch[5] || '30'),
+        duration: parseFloat(aerialMatch[9] || '3'),
+      },
+    };
+  }
+
+  // ORBIT_AXIS: ORBIT_AXIS axis: y radius: 200 speed: 0.3 heightAmplitude: 50 time: 0 duration: 3
+  const orbitAxisMatch = line.match(
+    /^ORBIT_AXIS\s+axis:\s*(\w+)\s+radius:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+heightAmplitude:\s*([\d.]+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (orbitAxisMatch) {
+    return {
+      type: 'ORBIT_AXIS',
+      time: parseFloat(orbitAxisMatch[7] || '0'),
+      params: {
+        axis: orbitAxisMatch[1],
+        radius: parseFloat(orbitAxisMatch[2]),
+        speed: parseFloat(orbitAxisMatch[3]),
+        heightAmplitude: parseFloat(orbitAxisMatch[5] || '50'),
+        duration: parseFloat(orbitAxisMatch[9] || '3'),
+      },
+    };
+  }
+
+  // BEZIER_FLIGHT: BEZIER_FLIGHT cp1: {0,0,0} cp2: {500,500,100} cp3: {1000,0,0} time: 0 duration: 3
+  const bezierMatch = line.match(
+    /^BEZIER_FLIGHT\s+cp1:\s*\{([^}]+)\}\s+cp2:\s*\{([^}]+)\}\s+cp3:\s*\{([^}]+)\}(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (bezierMatch) {
+    return {
+      type: 'BEZIER_FLIGHT',
+      time: parseFloat(bezierMatch[5] || '0'),
+      params: {
+        cp1: parseVector(bezierMatch[1]),
+        cp2: parseVector(bezierMatch[2]),
+        cp3: parseVector(bezierMatch[3]),
+        duration: parseFloat(bezierMatch[7] || '3'),
+      },
+    };
+  }
+
+  // WAVE: WAVE direction: y amplitude: 50 frequency: 2 speed: 0.5 time: 0 duration: 3
+  const waveMatch = line.match(
+    /^WAVE\s+direction:\s*(\w+)\s+amplitude:\s*([\d.]+)\s+frequency:\s*([\d.]+)(\s+speed:\s*([\d.]+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (waveMatch) {
+    return {
+      type: 'WAVE',
+      time: parseFloat(waveMatch[7] || '0'),
+      params: {
+        direction: waveMatch[1],
+        amplitude: parseFloat(waveMatch[2]),
+        frequency: parseFloat(waveMatch[3]),
+        speed: parseFloat(waveMatch[5] || '0.5'),
+        duration: parseFloat(waveMatch[9] || '3'),
+      },
+    };
+  }
+
+  // OSCILLATE: OSCILLATE centerX: 500 centerY: 400 amplitudeX: 100 amplitudeY: 50 frequency: 0.5 phase: 0 time: 0 duration: 3
+  const oscillateMatch = line.match(
+    /^OSCILLATE\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)\s+amplitudeX:\s*([\d.]+)\s+amplitudeY:\s*([\d.]+)\s+frequency:\s*([\d.]+)(\s+phase:\s*([\d.]+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (oscillateMatch) {
+    return {
+      type: 'OSCILLATE',
+      time: parseFloat(oscillateMatch[8] || '0'),
+      params: {
+        centerX: parseFloat(oscillateMatch[1]),
+        centerY: parseFloat(oscillateMatch[2]),
+        amplitudeX: parseFloat(oscillateMatch[3]),
+        amplitudeY: parseFloat(oscillateMatch[4]),
+        frequency: parseFloat(oscillateMatch[5]),
+        phase: parseFloat(oscillateMatch[7] || '0'),
+        duration: parseFloat(oscillateMatch[10] || '3'),
+      },
+    };
+  }
+
+  // PULSE: PULSE centerX: 500 centerY: 400 minScale: 0.5 maxScale: 1.5 speed: 1 time: 0 duration: 3
+  const pulseMatch = line.match(
+    /^PULSE\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)\s+minScale:\s*([\d.]+)\s+maxScale:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (pulseMatch) {
+    return {
+      type: 'PULSE',
+      time: parseFloat(pulseMatch[7] || '0'),
+      params: {
+        centerX: parseFloat(pulseMatch[1]),
+        centerY: parseFloat(pulseMatch[2]),
+        minScale: parseFloat(pulseMatch[3]),
+        maxScale: parseFloat(pulseMatch[4]),
+        speed: parseFloat(pulseMatch[5]),
+        duration: parseFloat(pulseMatch[9] || '3'),
+      },
+    };
+  }
+
+  // ARRAY_ROTATE: ARRAY_ROTATE centerX: 500 centerY: 400 speed: 30 direction: cw time: 0 duration: 3
+  const arrayRotateMatch = line.match(
+    /^ARRAY_ROTATE\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+direction:\s*(\w+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (arrayRotateMatch) {
+    return {
+      type: 'ARRAY_ROTATE',
+      time: parseFloat(arrayRotateMatch[7] || '0'),
+      params: {
+        centerX: parseFloat(arrayRotateMatch[1]),
+        centerY: parseFloat(arrayRotateMatch[2]),
+        speed: parseFloat(arrayRotateMatch[3]),
+        direction: arrayRotateMatch[5] || 'cw',
+        duration: parseFloat(arrayRotateMatch[9] || '3'),
+      },
+    };
+  }
+
+  // ARRAY_SCALE: ARRAY_SCALE centerX: 500 centerY: 400 minScale: 0.5 maxScale: 1.5 speed: 0.5 time: 0 duration: 3
+  const arrayScaleMatch = line.match(
+    /^ARRAY_SCALE\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)\s+minScale:\s*([\d.]+)\s+maxScale:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (arrayScaleMatch) {
+    return {
+      type: 'ARRAY_SCALE',
+      time: parseFloat(arrayScaleMatch[7] || '0'),
+      params: {
+        centerX: parseFloat(arrayScaleMatch[1]),
+        centerY: parseFloat(arrayScaleMatch[2]),
+        minScale: parseFloat(arrayScaleMatch[3]),
+        maxScale: parseFloat(arrayScaleMatch[4]),
+        speed: parseFloat(arrayScaleMatch[5]),
+        duration: parseFloat(arrayScaleMatch[9] || '3'),
+      },
+    };
+  }
+
+  // ORBIT_BRUSH: ORBIT_BRUSH brushId: brush_50 radius: 200 speed: 0.1 height: 50 time: 0
+  const orbitBrushMatch = line.match(
+    /^ORBIT_BRUSH\s+brushId:\s*(\S+)\s+radius:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+height:\s*([\d.]+))?(\s+time:\s*([\d.]+))?/i
+  );
+  if (orbitBrushMatch) {
+    return {
+      type: 'ORBIT_BRUSH',
+      time: parseFloat(orbitBrushMatch[7] || '0'),
+      params: {
+        brushId: orbitBrushMatch[1],
+        radius: parseFloat(orbitBrushMatch[2]),
+        speed: parseFloat(orbitBrushMatch[3]),
+        height: parseFloat(orbitBrushMatch[5] || '0'),
+      },
+    };
+  }
+
+  // RANDOM_FOLLOW: RANDOM_FOLLOW speed: 0.5 radius: 300 time: 0 duration: 5
+  const randomFollowMatch = line.match(
+    /^RANDOM_FOLLOW\s+speed:\s*([\d.]+)(\s+radius:\s*([\d.]+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (randomFollowMatch) {
+    return {
+      type: 'RANDOM_FOLLOW',
+      time: parseFloat(randomFollowMatch[5] || '0'),
+      params: {
+        speed: parseFloat(randomFollowMatch[1]),
+        radius: parseFloat(randomFollowMatch[3] || '300'),
+        duration: parseFloat(randomFollowMatch[7] || '5'),
+      },
+    };
+  }
+
+  // CAMERA_SHAKE: CAMERA_SHAKE intensity: 10 frequency: 5 duration: 0.5 time: 0
+  const cameraShakeMatch = line.match(
+    /^CAMERA_SHAKE\s+intensity:\s*([\d.]+)\s+frequency:\s*([\d.]+)(\s+duration:\s*([\d.]+))?(\s+time:\s*([\d.]+))?/i
+  );
+  if (cameraShakeMatch) {
+    return {
+      type: 'CAMERA_SHAKE',
+      time: parseFloat(cameraShakeMatch[6] || '0'),
+      params: {
+        intensity: parseFloat(cameraShakeMatch[1]),
+        frequency: parseFloat(cameraShakeMatch[2]),
+        duration: parseFloat(cameraShakeMatch[4] || '0.5'),
+      },
+    };
+  }
+
+  // CAMERA_PATH: CAMERA_PATH points: [{0,0,1000},{500,500,800},{1000,0,1000}] time: 0 duration: 5
+  const cameraPathMatch = line.match(
+    /^CAMERA_PATH\s+points:\s*\[([^\]]+)\](\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (cameraPathMatch) {
+    const pointsStr = cameraPathMatch[1];
+    const points: Vector3[] = [];
+    const pointMatches = pointsStr.match(/\{([^}]+)\}/g);
+    if (pointMatches) {
+      pointMatches.forEach(pm => {
+        const inner = pm.slice(1, -1);
+        points.push(parseVector(inner));
+      });
+    }
+    return {
+      type: 'CAMERA_PATH',
+      time: parseFloat(cameraPathMatch[3] || '0'),
+      params: {
+        points,
+        duration: parseFloat(cameraPathMatch[5] || '5'),
+      },
+    };
+  }
+
+  // BACKGROUND_COLOR: BACKGROUND_COLOR color: #1a1a2e time: 0 duration: 2
+  const bgColorMatch = line.match(
+    /^BACKGROUND_COLOR\s+color:\s*(\S+)(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (bgColorMatch) {
+    return {
+      type: 'BACKGROUND_COLOR',
+      time: parseFloat(bgColorMatch[3] || '0'),
+      params: {
+        color: bgColorMatch[1],
+        duration: parseFloat(bgColorMatch[5] || '2'),
+      },
+    };
+  }
+
+  // FOG: FOG near: 100 far: 1000 color: #1a1a2e time: 0 duration: 2
+  const fogMatch = line.match(
+    /^FOG\s+near:\s*([\d.]+)\s+far:\s*([\d.]+)\s+color:\s*(\S+)(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (fogMatch) {
+    return {
+      type: 'FOG',
+      time: parseFloat(fogMatch[5] || '0'),
+      params: {
+        near: parseFloat(fogMatch[1]),
+        far: parseFloat(fogMatch[2]),
+        color: fogMatch[3],
+        duration: parseFloat(fogMatch[7] || '2'),
+      },
+    };
+  }
+
+  // SPOT_LIGHT: SPOT_LIGHT position: {500,500,500} target: {0,0,0} intensity: 1 angle: 0.5 penumbra: 0.3 time: 0
+  const spotLightMatch = line.match(
+    /^SPOT_LIGHT\s+position:\s*\{([^}]+)\}\s+target:\s*\{([^}]+)\}\s+intensity:\s*([\d.]+)(\s+angle:\s*([\d.]+))?(\s+penumbra:\s*([\d.]+))?(\s+time:\s*([\d.]+))?/i
+  );
+  if (spotLightMatch) {
+    return {
+      type: 'SPOT_LIGHT',
+      time: parseFloat(spotLightMatch[8] || '0'),
+      params: {
+        position: parseVector(spotLightMatch[1]),
+        target: parseVector(spotLightMatch[2]),
+        intensity: parseFloat(spotLightMatch[3]),
+        angle: parseFloat(spotLightMatch[5] || '0.5'),
+        penumbra: parseFloat(spotLightMatch[7] || '0.3'),
+      },
+    };
+  }
+
+  // EXPLOSION: EXPLOSION centerX: 500 centerY: 400 speed: 500 time: 0 duration: 1
+  const explosionMatch = line.match(
+    /^EXPLOSION\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)(\s+centerZ:\s*([\d.]+))?\s+speed:\s*([\d.]+)(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (explosionMatch) {
+    return {
+      type: 'EXPLOSION',
+      time: parseFloat(explosionMatch[7] || '0'),
+      params: {
+        centerX: parseFloat(explosionMatch[1]),
+        centerY: parseFloat(explosionMatch[2]),
+        centerZ: parseFloat(explosionMatch[4] || '0'),
+        speed: parseFloat(explosionMatch[5]),
+        duration: parseFloat(explosionMatch[9] || '1'),
+      },
+    };
+  }
+
+  // IMPLOSION: IMPLOSION centerX: 500 centerY: 400 speed: 500 time: 0 duration: 1
+  const implosionMatch = line.match(
+    /^IMPLOSION\s+centerX:\s*([\d.]+)\s+centerY:\s*([\d.]+)(\s+centerZ:\s*([\d.]+))?\s+speed:\s*([\d.]+)(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?/i
+  );
+  if (implosionMatch) {
+    return {
+      type: 'IMPLOSION',
+      time: parseFloat(implosionMatch[7] || '0'),
+      params: {
+        centerX: parseFloat(implosionMatch[1]),
+        centerY: parseFloat(implosionMatch[2]),
+        centerZ: parseFloat(implosionMatch[4] || '0'),
+        speed: parseFloat(implosionMatch[5]),
+        duration: parseFloat(implosionMatch[9] || '1'),
+      },
+    };
+  }
+
+  // COLOR_FLASH: COLOR_FLASH color: #ffffff duration: 0.5 intensity: 0.8 time: 0
+  const colorFlashMatch = line.match(
+    /^COLOR_FLASH\s+color:\s*(\S+)\s+duration:\s*([\d.]+)(\s+intensity:\s*([\d.]+))?(\s+time:\s*([\d.]+))?/i
+  );
+  if (colorFlashMatch) {
+    return {
+      type: 'COLOR_FLASH',
+      time: parseFloat(colorFlashMatch[6] || '0'),
+      params: {
+        color: colorFlashMatch[1],
+        duration: parseFloat(colorFlashMatch[2]),
+        intensity: parseFloat(colorFlashMatch[4] || '1'),
+      },
+    };
+  }
+
+  // STROBE: STROBE color: #ffffff frequency: 10 duration: 2 time: 0
+  const strobeMatch = line.match(
+    /^STROBE\s+color:\s*(\S+)\s+frequency:\s*([\d.]+)(\s+duration:\s*([\d.]+))?(\s+time:\s*([\d.]+))?/i
+  );
+  if (strobeMatch) {
+    return {
+      type: 'STROBE',
+      time: parseFloat(strobeMatch[6] || '0'),
+      params: {
+        color: strobeMatch[1],
+        frequency: parseFloat(strobeMatch[2]),
+        duration: parseFloat(strobeMatch[4] || '2'),
+      },
+    };
+  }
+
+  // RACK_FOCUS: RACK_FOCUS startDistance: 0.1 endDistance: 1 duration: 1 time: 0
+  const rackFocusMatch = line.match(
+    /^RACK_FOCUS\s+startDistance:\s*([\d.]+)\s+endDistance:\s*([\d.]+)(\s+duration:\s*([\d.]+))?(\s+time:\s*([\d.]+))?/i
+  );
+  if (rackFocusMatch) {
+    return {
+      type: 'RACK_FOCUS',
+      time: parseFloat(rackFocusMatch[6] || '0'),
+      params: {
+        startDistance: parseFloat(rackFocusMatch[1]),
+        endDistance: parseFloat(rackFocusMatch[2]),
+        duration: parseFloat(rackFocusMatch[4] || '1'),
       },
     };
   }

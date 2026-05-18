@@ -342,4 +342,66 @@ export class LightSystem {
   getPointLights(): THREE.PointLight[] {
     return this.pointLights;
   }
+
+  // Animate scene background color
+  animateBackgroundColor(color: string, duration: number = 2) {
+    const targetColor = new THREE.Color(color);
+    const proxy = { r: this.scene.background ? (this.scene.background as THREE.Color).r : 0, g: this.scene.background ? (this.scene.background as THREE.Color).g : 0, b: this.scene.background ? (this.scene.background as THREE.Color).b : 0 };
+
+    gsap.to(proxy, {
+      r: targetColor.r,
+      g: targetColor.g,
+      b: targetColor.b,
+      duration,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        this.scene.background = new THREE.Color(proxy.r, proxy.g, proxy.b);
+      },
+    });
+  }
+
+  // Animate scene fog
+  animateFog(near: number, far: number, color: string, duration: number = 2) {
+    const targetColor = new THREE.Color(color);
+    const proxy = {
+      near: this.scene.fog ? (this.scene.fog as THREE.Fog).near : near,
+      far: this.scene.fog ? (this.scene.fog as THREE.Fog).far : far,
+      r: this.scene.fog ? ((this.scene.fog as THREE.Fog).color as THREE.Color).r : 0,
+      g: this.scene.fog ? ((this.scene.fog as THREE.Fog).color as THREE.Color).g : 0,
+      b: this.scene.fog ? ((this.scene.fog as THREE.Fog).color as THREE.Color).b : 0,
+    };
+
+    gsap.to(proxy, {
+      near,
+      far,
+      r: targetColor.r,
+      g: targetColor.g,
+      b: targetColor.b,
+      duration,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        this.scene.fog = new THREE.Fog(new THREE.Color(proxy.r, proxy.g, proxy.b), proxy.near, proxy.far);
+      },
+    });
+  }
+
+  // Create a spot light
+  createSpotLight(position: Vector3, target: Vector3, intensity: number = 1, angle: number = 0.5, penumbra: number = 0.3): THREE.SpotLight {
+    const spotLight = new THREE.SpotLight(
+      0xffffff,
+      intensity,
+      0, // distance (0 = infinite)
+      angle, // angle
+      penumbra, // penumbra
+      2 // decay
+    );
+
+    spotLight.position.set(position.x, position.y, position.z);
+    spotLight.target.position.set(target.x, target.y, target.z);
+
+    this.scene.add(spotLight);
+    this.scene.add(spotLight.target);
+
+    return spotLight;
+  }
 }
