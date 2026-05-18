@@ -145,20 +145,24 @@ export class CameraController {
       targetPos = currentBrush.targetPosition;
     }
 
-    // Check if it's time to switch to a new target brush
-    this.randomOrbitLastSwitch += deltaTime;
-    if (this.randomOrbitLastSwitch >= this.randomOrbitChangeInterval) {
-      this.currentOrbitBrushIndex = Math.floor(Math.random() * brushes.length);
-      this.randomOrbitLastSwitch = 0;
-    }
-
-    // Update orbit angle
+    // Update orbit angle - complete one full orbit (2π radians) before switching
     this.orbitAngle += this.randomOrbitSpeed * deltaTime;
 
-    // Calculate camera position on orbit circle around current brush
-    const x = targetPos.x + Math.cos(this.orbitAngle) * this.randomOrbitRadius;
-    const y = targetPos.y + this.randomOrbitHeight;
-    const z = targetPos.z + Math.sin(this.orbitAngle) * this.randomOrbitRadius;
+    // Check if completed one full orbit (2π radians ≈ 6.283)
+    if (this.orbitAngle >= Math.PI * 2) {
+      // Switch to a new random target
+      this.currentOrbitBrushIndex = Math.floor(Math.random() * brushes.length);
+      this.orbitAngle = 0; // Reset angle for new target
+    }
+
+    // Calculate camera position on true 3D orbit circle around current brush
+    // Spherical orbit: theta for horizontal (XZ), phi for vertical (Y)
+    const theta = this.orbitAngle; // horizontal angle
+    const phi = Math.PI / 4 + Math.sin(this.orbitAngle * 0.5) * Math.PI / 6; // elevation oscillates ±30° around 45°
+
+    const x = targetPos.x + Math.cos(theta) * Math.cos(phi) * this.randomOrbitRadius;
+    const y = targetPos.y + Math.sin(phi) * this.randomOrbitRadius;
+    const z = targetPos.z + Math.sin(theta) * Math.cos(phi) * this.randomOrbitRadius;
 
     // Smoothly interpolate camera position
     const lerpFactor = 1 - Math.pow(0.001, deltaTime);

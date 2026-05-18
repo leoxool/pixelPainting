@@ -42,6 +42,7 @@ export interface RandomRoamConfig {
   speed: number; // movement speed
   amplitude: number; // how far from original position
   changeInterval: number; // seconds between direction changes
+  rotationSpeed?: number; // rotation speed multiplier (default 1.0)
 }
 
 export class BrushChoreographer {
@@ -217,12 +218,14 @@ export class BrushChoreographer {
     brushes.forEach((brush, index) => {
       // Each brush has its own phase based on index and a hash of its id
       const brushPhase = (index * 137.5 + (brush.id.charCodeAt(0) || 0) * 0.1) % (Math.PI * 2);
+      // Separate phase for rotation to make it independent of position
+      const rotPhase = (index * 73.3 + (brush.id.charCodeAt(0) || 0) * 0.3) % (Math.PI * 2);
 
-      // Direction changes over time
-      const directionPhase = Math.floor(elapsedTime / changeInterval);
+      // Continuous direction change - no discrete jumps
+      const directionPhase = elapsedTime / changeInterval;
       const directionAngle = brushPhase + directionPhase * Math.PI * 0.7;
 
-      // Calculate offset from original position
+      // Calculate offset from original position using smooth continuous functions
       const offsetX = Math.cos(elapsedTime * speed + brushPhase) * amplitude;
       const offsetY = Math.sin(elapsedTime * speed * 1.3 + brushPhase * 2) * amplitude * 0.7;
       const offsetZ = Math.sin(elapsedTime * speed * 0.7 + directionAngle) * amplitude * 0.3;
@@ -231,7 +234,13 @@ export class BrushChoreographer {
       const y = brush.targetPosition.y + offsetY;
       const z = brush.targetPosition.z + offsetZ;
 
-      onUpdate(brush, { x, y, z });
+      const rotationSpeed = config.rotationSpeed ?? 1.0;
+      // Random rotation on all three axes - independent frequencies for each axis
+      const rotX = Math.sin(elapsedTime * 0.7 * rotationSpeed + rotPhase) * Math.PI * 2;
+      const rotY = Math.cos(elapsedTime * 0.9 * rotationSpeed + rotPhase * 1.5) * Math.PI * 2;
+      const rotZ = Math.sin(elapsedTime * 1.1 * rotationSpeed + rotPhase * 0.8) * Math.PI * 2;
+
+      onUpdate(brush, { x, y, z }, { x: rotX, y: rotY, z: rotZ });
     });
   }
 

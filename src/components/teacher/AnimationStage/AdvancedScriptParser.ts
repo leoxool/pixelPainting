@@ -762,6 +762,52 @@ function parseBasicLine(line: string): ExtendedScriptCommand | null {
     };
   }
 
+  // RANDOM_ROAM: RANDOM_ROAM speed: 0.4 amplitude: 150 [changeInterval: 2] [rotationSpeed: 1.5] [duration: 5] time: 0
+  const roamMatch = line.match(/^RANDOM_ROAM\s+speed:\s*([\d.]+)\s+amplitude:\s*([\d.]+)(\s+changeInterval:\s*([\d.]+))?(\s+rotationSpeed:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?\s+time:\s*([\d.]+)/i);
+  if (roamMatch) {
+    return {
+      type: 'RANDOM_ROAM',
+      time: parseFloat(roamMatch[9] || '0'),
+      params: {
+        speed: parseFloat(roamMatch[1]),
+        amplitude: parseFloat(roamMatch[2]),
+        changeInterval: parseFloat(roamMatch[4] || '2'),
+        rotationSpeed: parseFloat(roamMatch[6] || '1'),
+        duration: parseFloat(roamMatch[8] || '5'),
+      },
+    };
+  }
+
+  // ROTATE_BRUSH: ROTATE_BRUSH axis: x|y|z speed: 90 [duration: 3] time: 0
+  const rotateMatch = line.match(/^ROTATE_BRUSH\s+axis:\s*(\w+)\s+speed:\s*([\d.]+)(\s+duration:\s*([\d.]+))?\s+time:\s*([\d.]+)/i);
+  if (rotateMatch) {
+    return {
+      type: 'ROTATE_BRUSH',
+      time: parseFloat(rotateMatch[5] || '0'),
+      params: {
+        axis: rotateMatch[1],
+        speed: parseFloat(rotateMatch[2]),
+        duration: parseFloat(rotateMatch[4] || '3'),
+      },
+    };
+  }
+
+  // RANDOM_ORBIT_BRUSH: RANDOM_ORBIT_BRUSH radius: 200 speed: 0.3 [height: 50] [duration: 5] time: 0
+  // speed: radians per second, completes one orbit (2π) in 2π/speed seconds
+  const randomOrbitMatch = line.match(/^RANDOM_ORBIT_BRUSH\s+radius:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+height:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?\s+time:\s*([\d.]+)/i);
+  if (randomOrbitMatch) {
+    return {
+      type: 'RANDOM_ORBIT_BRUSH',
+      time: parseFloat(randomOrbitMatch[7] || '0'),
+      params: {
+        radius: parseFloat(randomOrbitMatch[1]),
+        speed: parseFloat(randomOrbitMatch[2]),
+        height: parseFloat(randomOrbitMatch[4] || '50'),
+        duration: parseFloat(randomOrbitMatch[6] || '5'),
+      },
+    };
+  }
+
   return null;
 }
 

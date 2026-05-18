@@ -292,7 +292,7 @@ export class MovementController {
   // Optionally add to external timeline
   flyInBrushes(
     brushes: AnimatedBrush[],
-    direction: 'left' | 'right' | 'top' | 'bottom' = 'left',
+    direction: 'left' | 'right' | 'top' | 'bottom' | 'random' = 'left',
     duration: number = 2,
     staggerDelay: number = 0.0002,
     spreadAmount: number = 0.5,  // How much vertical spread (0-1)
@@ -343,6 +343,12 @@ export class MovementController {
           startX = targetPos.x + (Math.random() - 0.5) * screenWidth * spreadAmount;
           startY = screenHeight + this.brushSize.y;
           startZ = targetPos.z + (Math.random() - 0.5) * 50;
+          break;
+        case 'random':
+          // Scatter randomly around the screen
+          startX = Math.random() * screenWidth;
+          startY = Math.random() * screenHeight;
+          startZ = (Math.random() - 0.5) * 200;
           break;
       }
 

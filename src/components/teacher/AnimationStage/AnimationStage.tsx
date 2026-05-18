@@ -1309,7 +1309,7 @@ CAMERA_MODE mode: orbit time: 15
         case 'BRUSH_FLIGHT': {
           if (!movementControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
 
-          const direction = (cmd.params.direction as 'left' | 'right' | 'top' | 'bottom') || 'left';
+          const direction = (cmd.params.direction as 'left' | 'right' | 'top' | 'bottom' | 'random') || 'random';
           const flightDuration = (cmd.params.duration as number) || 3;
           const { width, height } = dimensionsRef.current;
 
@@ -1324,7 +1324,7 @@ CAMERA_MODE mode: orbit time: 15
               width,
               height,
               masterTimeline,
-              index,
+              cmdTime,
               (brush, pos) => {
                 const mesh = instancedMeshesRef.current[brush.level];
                 if (mesh && dummyRef.current) {
@@ -1337,7 +1337,7 @@ CAMERA_MODE mode: orbit time: 15
                 brushPositionsRef.current.set(brush.id, pos);
               }
             );
-          }, [], index);
+          }, [], cmdTime);
           break;
         }
 
@@ -1818,18 +1818,24 @@ CAMERA_MODE mode: orbit time: 15
 
         case 'RANDOM_ROAM': {
           if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
-          const roamDuration = (cmd.params.duration as number) || 5;
           const roamSpeed = (cmd.params.speed as number) || 0.5;
           const roamAmplitude = (cmd.params.amplitude as number) || 100;
           const roamChangeInterval = (cmd.params.changeInterval as number) || 2;
-          const progressProxy = { t: 0 };
+          const roamRotationSpeed = (cmd.params.rotationSpeed as number) || 1.0;
 
-          masterTimeline.to(progressProxy, {
-            t: 1,
-            duration: roamDuration,
+          // Use a proxy that ticks every frame for continuous infinite animation
+          const tickProxy = { dummy: 0 };
+
+          masterTimeline.to(tickProxy, {
+            dummy: 1,
+            duration: 0.1, // Short duration, repeats infinitely
+            repeat: -1,
             ease: 'linear',
             onUpdate: () => {
               if (!brushChoreographerRef.current || !dummyRef.current) return;
+
+              // Calculate actual elapsed time from timeline position
+              const elapsedTime = Math.max(0, masterTimeline.time() - cmdTime);
 
               brushChoreographerRef.current.randomRoamBrushes(
                 brushes,
@@ -1837,12 +1843,16 @@ CAMERA_MODE mode: orbit time: 15
                   speed: roamSpeed,
                   amplitude: roamAmplitude,
                   changeInterval: roamChangeInterval,
+                  rotationSpeed: roamRotationSpeed,
                 },
-                progressProxy.t * roamDuration,
-                (brush, pos) => {
+                elapsedTime,
+                (brush, pos, rot) => {
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
                     dummyRef.current.position.set(pos.x, pos.y, pos.z);
+                    if (rot) {
+                      dummyRef.current.rotation.set(rot.x, rot.y, rot.z);
+                    }
                     dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
                     dummyRef.current.updateMatrix();
                     mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);

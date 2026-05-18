@@ -257,7 +257,7 @@ RANDOM_FOLLOW speed: 0.5 radius: 300 time: 3 duration: 10
 ### 3.9 RANDOM_ORBIT_BRUSH - 随机目标环绕
 
 ```javascript
-RANDOM_ORBIT_BRUSH radius: 数值 speed: 数值 [height: 数值] [changeInterval: 数值] time: N duration: M
+RANDOM_ORBIT_BRUSH radius: 数值 speed: 数值 [height: 数值] time: N duration: M
 ```
 
 **参数说明:**
@@ -265,17 +265,18 @@ RANDOM_ORBIT_BRUSH radius: 数值 speed: 数值 [height: 数值] [changeInterval
 | 参数 | 说明 |
 |------|------|
 | `radius` | 环绕半径 |
-| `speed` | 环绕速度 (弧度/秒) |
-| `height` | 高度偏移 (默认50) |
-| `changeInterval` | 目标切换间隔 (秒，默认2) |
+| `speed` | 环绕速度 (弧度/秒)，完成一周(2π)需要 2π/speed 秒 |
+| `height` | 环绕中心高度基准 (默认50) |
+
+**行为:** 摄像机在三维球面上环绕当前目标，完成一整周(360°)后自动切换到下一个随机目标。仰角在约15°-75°之间振荡，实现真正的三维立体环绕效果。
 
 **示例:**
 ```javascript
-# 相机环绕随机笔刷，每2秒切换目标
-RANDOM_ORBIT_BRUSH radius: 200 speed: 0.3 height: 50 changeInterval: 2 time: 0 duration: 8
+# 慢速环绕特写，每个目标约3秒
+RANDOM_ORBIT_BRUSH radius: 80 speed: 2 height: 30 time: 0 duration: 10
 
-# 快速环绕
-RANDOM_ORBIT_BRUSH radius: 150 speed: 0.5 height: 30 changeInterval: 1 time: 5 duration: 5
+# 快速环绕，每个目标约1.5秒
+RANDOM_ORBIT_BRUSH radius: 100 speed: 4 height: 20 time: 5 duration: 5
 ```
 
 ---
@@ -507,7 +508,7 @@ ROTATE_BRUSH axis: x speed: 60 time: 5 duration: 4
 ### 6.2 RANDOM_ROAM - 笔刷随机漫游
 
 ```javascript
-RANDOM_ROAM speed: 数值 amplitude: 数值 [changeInterval: 数值] [duration: 数值] time: N
+RANDOM_ROAM speed: 数值 amplitude: 数值 [changeInterval: 数值] [rotationSpeed: 数值] [duration: 数值] time: N
 ```
 
 **参数说明:**
@@ -517,15 +518,18 @@ RANDOM_ROAM speed: 数值 amplitude: 数值 [changeInterval: 数值] [duration: 
 | `speed` | 移动速度 |
 | `amplitude` | 漫游幅度 (离原始位置的最大偏移) |
 | `changeInterval` | 方向切换间隔 (秒，默认2) |
+| `rotationSpeed` | 旋转速度倍率 (默认1.0，值越大旋转越快) |
 | `duration` | 持续时间 (秒) |
+
+**行为:** 每个笔刷在三维空间中进行随机漫游运动，包含三个轴向的独立随机旋转。
 
 **示例:**
 ```javascript
 # 缓慢漫游
 RANDOM_ROAM speed: 0.3 amplitude: 80 time: 0 duration: 6
 
-# 快速漫游
-RANDOM_ROAM speed: 0.8 amplitude: 120 changeInterval: 1.5 time: 3 duration: 5
+# 快速漫游且旋转加速
+RANDOM_ROAM speed: 0.8 amplitude: 120 rotationSpeed: 1.5 time: 3 duration: 5
 ```
 
 ---

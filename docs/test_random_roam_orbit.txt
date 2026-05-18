@@ -1,16 +1,20 @@
 # ═══════════════════════════════════════════════════════════
-# 简单测试脚本 - 笔刷随机漫游（无限运行）
-# 白色背景，无环境特效
+# 随机漫游 + 摄像机环绕特写测试
+# 白色背景，笔刷随机漫游，摄像机特写单个笔刷环绕一周后切换目标
 # ═══════════════════════════════════════════════════════════
 
 # 白色背景
 BACKGROUND_COLOR color: #ffffff time: 0
 
-# 相机位置 - 俯视角度
+# 摄像机初始位置 - 俯视角度
 CAMERA position: {500, 400, 1200} lookAt: {500, 400, 0} time: 0 fov: 60
 
-# 先散开笔刷到随机位置
+# 散开笔刷到随机位置
 BRUSH_FLIGHT duration: 2 scatter: 500 time: 0 direction: random
 
-# 所有笔刷随机漫游（无限运行）
-RANDOM_ROAM speed: 0.4 amplitude: 150 changeInterval: 1.5 time: 2
+# 笔刷随机漫游，旋转速度为1.5
+RANDOM_ROAM speed: 0.3 amplitude: 120 changeInterval: 2 rotationSpeed: 1.5 time: 2
+
+# 摄像机特写单个笔刷进行环绕运镜，完成一周后切换目标
+# radius: 80 (close-up), speed: 2 (完成一周约3.14秒), height: 30
+RANDOM_ORBIT_BRUSH radius: 80 speed: 2 height: 30 time: 2
