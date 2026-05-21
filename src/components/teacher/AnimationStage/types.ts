@@ -148,6 +148,7 @@ export type ExtendedCommandType =
   | 'RANDOM_FOLLOW'
   | 'CAMERA_SHAKE'
   | 'CAMERA_PATH'
+  | 'CAMERA_ORBIT_ARRAY'
   // Environment
   | 'BACKGROUND_COLOR'
   | 'FOG'

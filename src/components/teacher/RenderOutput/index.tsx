@@ -154,7 +154,7 @@ export function RenderOutputPanel({
         {/* Canvas wrapper with transform */}
         <div
           className={`rounded-lg overflow-hidden ${isFullscreen ? 'fixed inset-0 z-40 flex items-center justify-center' : 'max-w-[600px] w-full h-auto bg-white'}`}
-          style={isFullscreen ? { cursor: isPanning ? 'grabbing' : 'grab', backgroundColor: '#ececec' } : { aspectRatio: sourceAspectRatio }}
+          style={isFullscreen ? { cursor: isPanning ? 'grabbing' : 'grab', backgroundColor: 'black' } : { aspectRatio: sourceAspectRatio }}
         >
           <div
             style={{

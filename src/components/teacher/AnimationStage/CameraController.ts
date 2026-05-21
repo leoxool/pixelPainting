@@ -73,6 +73,15 @@ export class CameraController {
   private randomOrbitLastSwitch: number = 0;
   private currentOrbitBrushIndex: number = 0;
 
+  // Orbit around cluster (bounding box center) mode
+  private isOrbitArrayMode: boolean = false;
+  private orbitArrayRadius: number = 800;
+  private orbitArraySpeed: number = 0.15;
+  private orbitArrayHeightOffset: number = 0;
+  private orbitArrayAngle: number = 0;
+  private orbitArrayDuration: number = 0; // 0 = indefinite
+  private orbitArrayStartTime: number = 0;
+
   constructor(options: CameraControllerOptions) {
     this.camera = options.camera;
     this.mode = options.mode || 'fixed';
@@ -90,6 +99,10 @@ export class CameraController {
 
   setMode(mode: CameraMode) {
     this.mode = mode;
+  }
+
+  getMode(): CameraMode {
+    return this.mode;
   }
 
   setFollowTarget(target: CameraFollowTarget | null) {
@@ -122,7 +135,9 @@ export class CameraController {
     if (this.mode === 'follow' && this.followTarget && brushPositions) {
       this.updateFollowMode(brushPositions, deltaTime);
     } else if (this.mode === 'orbit') {
-      if (this.isRandomOrbitMode) {
+      if (this.isOrbitArrayMode) {
+        this.updateOrbitArrayMode(deltaTime, brushPositions);
+      } else if (this.isRandomOrbitMode) {
         this.updateRandomOrbitMode(deltaTime, brushPositions);
       } else {
         this.updateOrbitMode(deltaTime);
@@ -172,6 +187,60 @@ export class CameraController {
 
     // Always look at the target brush position
     this.smoothLookAt.set(targetPos.x, targetPos.y, targetPos.z);
+
+    this.camera.position.copy(this.smoothPosition);
+    this.camera.lookAt(this.smoothLookAt);
+  }
+
+  private updateOrbitArrayMode(deltaTime: number, brushPositions?: Map<string, Vector3>) {
+    if (!this.isOrbitArrayMode || !brushPositions || brushPositions.size === 0) return;
+
+    // Check duration limit
+    if (this.orbitArrayDuration > 0) {
+      const elapsed = performance.now() / 1000 - this.orbitArrayStartTime;
+      if (elapsed >= this.orbitArrayDuration) {
+        this.stopOrbitArray();
+        return;
+      }
+    }
+
+    // Calculate bounding box center of all brush positions
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+    brushPositions.forEach((pos) => {
+      minX = Math.min(minX, pos.x);
+      minY = Math.min(minY, pos.y);
+      minZ = Math.min(minZ, pos.z);
+      maxX = Math.max(maxX, pos.x);
+      maxY = Math.max(maxY, pos.y);
+      maxZ = Math.max(maxZ, pos.z);
+    });
+
+    // Cluster center (bounding box center)
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+
+    // Update orbit angle
+    this.orbitArrayAngle += this.orbitArraySpeed * deltaTime;
+
+    // Spherical coordinates for camera position around cluster center
+    const theta = this.orbitArrayAngle; // horizontal angle
+    const phi = Math.PI / 4 + Math.sin(this.orbitArrayAngle * 0.5) * Math.PI / 6; // elevation oscillates ±30° around 45°
+
+    const x = centerX + Math.cos(theta) * Math.cos(phi) * this.orbitArrayRadius;
+    const y = centerY + Math.sin(phi) * this.orbitArrayRadius + this.orbitArrayHeightOffset;
+    const z = centerZ + Math.sin(theta) * Math.cos(phi) * this.orbitArrayRadius;
+
+    // Smoothly interpolate camera position
+    const lerpFactor = 1 - Math.pow(0.001, deltaTime);
+    this.smoothPosition.x += (x - this.smoothPosition.x) * lerpFactor;
+    this.smoothPosition.y += (y - this.smoothPosition.y) * lerpFactor;
+    this.smoothPosition.z += (z - this.smoothPosition.z) * lerpFactor;
+
+    // Always look at the cluster center
+    this.smoothLookAt.set(centerX, centerY, centerZ);
 
     this.camera.position.copy(this.smoothPosition);
     this.camera.lookAt(this.smoothLookAt);
@@ -441,6 +510,37 @@ export class CameraController {
   // Stop random orbit mode
   stopRandomOrbit() {
     this.isRandomOrbitMode = false;
+    this.mode = 'fixed';
+    this.isAnimating = false;
+  }
+
+  // Start orbit around cluster (bounding box center of all brushes)
+  startOrbitAroundCluster(
+    brushes: AnimatedBrush[],
+    radius: number = 800,
+    speed: number = 0.15,
+    heightOffset: number = 0,
+    duration: number = 0
+  ) {
+    this.mode = 'orbit';
+    this.isOrbitArrayMode = true;
+    this.orbitArrayRadius = radius;
+    this.orbitArraySpeed = speed;
+    this.orbitArrayHeightOffset = heightOffset;
+    this.orbitArrayDuration = duration;
+    this.orbitArrayAngle = 0;
+    this.orbitArrayStartTime = performance.now() / 1000;
+    this.isAnimating = true;
+  }
+
+  // Check if camera is in orbit array mode
+  isInOrbitArrayMode(): boolean {
+    return this.isOrbitArrayMode;
+  }
+
+  // Stop orbit array mode
+  stopOrbitArray() {
+    this.isOrbitArrayMode = false;
     this.mode = 'fixed';
     this.isAnimating = false;
   }

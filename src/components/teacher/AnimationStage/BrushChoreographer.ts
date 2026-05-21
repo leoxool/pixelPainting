@@ -40,13 +40,17 @@ export interface RotateBrushConfig {
 
 export interface RandomRoamConfig {
   speed: number; // movement speed
-  amplitude: number; // how far from original position
-  changeInterval: number; // seconds between direction changes
+  amplitude: number; // base amplitude for all axes
   rotationSpeed?: number; // rotation speed multiplier (default 1.0)
+  rangeX?: number; // X axis range multiplier (default 1.0)
+  rangeY?: number; // Y axis range multiplier (default 0.7)
+  rangeZ?: number; // Z axis range multiplier (default 0.3)
+  swimSpeed?: number; // swimming oscillation speed multiplier (default 1.0)
 }
 
 export class BrushChoreographer {
   private scene: THREE.Scene;
+  private stopped: boolean = false;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -207,41 +211,110 @@ export class BrushChoreographer {
   }
 
   // RANDOM_ROAM - All brushes wander randomly (each has its own direction)
+  // Each brush has completely independent motion parameters for natural random walk
   randomRoamBrushes(
     brushes: AnimatedBrush[],
     config: RandomRoamConfig,
     elapsedTime: number,
     onUpdate: (brush: AnimatedBrush, pos: Vector3, rot?: Vector3) => void
   ): void {
-    const { speed, amplitude, changeInterval } = config;
+    // If stopped, do nothing (allows freeze effect)
+    if (this.stopped) return;
+
+    const { speed, amplitude } = config;
 
     brushes.forEach((brush, index) => {
-      // Each brush has its own phase based on index and a hash of its id
-      const brushPhase = (index * 137.5 + (brush.id.charCodeAt(0) || 0) * 0.1) % (Math.PI * 2);
-      // Separate phase for rotation to make it independent of position
-      const rotPhase = (index * 73.3 + (brush.id.charCodeAt(0) || 0) * 0.3) % (Math.PI * 2);
+      // Use both index and id for unique per-brush randomness
+      const idHash = brush.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      const seed = (index * 1000 + idHash) / 10000;
 
-      // Continuous direction change - no discrete jumps
-      const directionPhase = elapsedTime / changeInterval;
-      const directionAngle = brushPhase + directionPhase * Math.PI * 0.7;
+      // Simple prng for stable per-brush random values
+      const nextRandom = (n: number) => {
+        const x = Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453;
+        return x - Math.floor(x);
+      };
 
-      // Calculate offset from original position using smooth continuous functions
-      const offsetX = Math.cos(elapsedTime * speed + brushPhase) * amplitude;
-      const offsetY = Math.sin(elapsedTime * speed * 1.3 + brushPhase * 2) * amplitude * 0.7;
-      const offsetZ = Math.sin(elapsedTime * speed * 0.7 + directionAngle) * amplitude * 0.3;
+      // Generate unique parameters for this brush
+      const r1 = nextRandom(index * 7.1);
+      const r2 = nextRandom(index * 13.7);
+      const r3 = nextRandom(index * 23.3);
+      const r4 = nextRandom(index * 37.1);
+      const r5 = nextRandom(index * 53.7);
+      const r6 = nextRandom(index * 79.3);
+      const r7 = nextRandom(index * 97.3);
+      const r8 = nextRandom(index * 127.1);
+
+      // Independent frequencies for each axis
+      const freqX = 0.3 + r1 * 1.4;
+      const freqY = 0.3 + r2 * 1.4;
+      const freqZ = 0.3 + r3 * 1.4;
+
+      // Independent speed per axis
+      const spdX = speed * (0.2 + r4 * 1.6);
+      const spdY = speed * (0.2 + r5 * 1.6);
+      const spdZ = speed * (0.2 + r6 * 1.6);
+
+      // Unique phases for each axis
+      const phaseX = r1 * Math.PI * 2;
+      const phaseY = r2 * Math.PI * 2;
+      const phaseZ = r3 * Math.PI * 2;
+      const phaseRotX = r7 * Math.PI * 2;
+      const phaseRotY = r8 * Math.PI * 2;
+      const phaseRotZ = (r1 + r2) * Math.PI * 2;
+
+      const rangeX = config.rangeX ?? 1.0;
+      const rangeY = config.rangeY ?? 0.7;
+      const rangeZ = config.rangeZ ?? 0.3;
+
+      // Each brush moves independently on each axis
+      const offsetX = Math.cos(elapsedTime * spdX * freqX + phaseX) * amplitude * rangeX;
+      const offsetY = Math.sin(elapsedTime * spdY * freqY + phaseY) * amplitude * rangeY;
+      const offsetZ = Math.sin(elapsedTime * spdZ * freqZ + phaseZ) * amplitude * rangeZ;
 
       const x = brush.targetPosition.x + offsetX;
       const y = brush.targetPosition.y + offsetY;
       const z = brush.targetPosition.z + offsetZ;
 
-      const rotationSpeed = config.rotationSpeed ?? 1.0;
-      // Random rotation on all three axes - independent frequencies for each axis
-      const rotX = Math.sin(elapsedTime * 0.7 * rotationSpeed + rotPhase) * Math.PI * 2;
-      const rotY = Math.cos(elapsedTime * 0.9 * rotationSpeed + rotPhase * 1.5) * Math.PI * 2;
-      const rotZ = Math.sin(elapsedTime * 1.1 * rotationSpeed + rotPhase * 0.8) * Math.PI * 2;
+      // Velocity for heading
+      const velX = -Math.sin(elapsedTime * spdX * freqX + phaseX) * spdX * freqX * amplitude * rangeX;
+      const velY = Math.cos(elapsedTime * spdY * freqY + phaseY) * spdY * freqY * amplitude * rangeY;
+      const velZ = Math.cos(elapsedTime * spdZ * freqZ + phaseZ) * spdZ * freqZ * amplitude * rangeZ;
+
+      const speedMagnitude = Math.sqrt(velX * velX + velY * velY + velZ * velZ);
+      const nvelX = speedMagnitude > 0.001 ? velX / speedMagnitude : 0;
+      const nvelY = speedMagnitude > 0.001 ? velY / speedMagnitude : 0;
+      const nvelZ = speedMagnitude > 0.001 ? velZ / speedMagnitude : 0;
+
+      // Heading from velocity direction
+      const yawAngle = Math.atan2(nvelX, nvelY);
+      const lenXY = Math.sqrt(nvelX * nvelX + nvelY * nvelY);
+      const pitchAngle = Math.atan2(-nvelZ, lenXY);
+
+      // Swimming oscillation - unique rhythm per brush
+      const swimSpeed = config.swimSpeed ?? 1.0;
+      const swimPhase = elapsedTime * 2 * swimSpeed + phaseX;
+      const pitchPhase = elapsedTime * 1.5 * swimSpeed + phaseRotX;
+
+      const swimOscillation = Math.sin(swimPhase) * 0.2;
+      const pitchOscillation = Math.sin(pitchPhase) * 0.1;
+      const rollOscillation = Math.cos(swimPhase * 0.6 + phaseRotY) * 0.05;
+
+      const rotX = pitchAngle + pitchOscillation;
+      const rotY = Math.sin(elapsedTime * 0.3 + phaseRotY) * 0.1;
+      const rotZ = yawAngle + swimOscillation + rollOscillation;
 
       onUpdate(brush, { x, y, z }, { x: rotX, y: rotY, z: rotZ });
     });
+  }
+
+  // Stop all brush animations - sets flag that roaming callbacks check
+  stopAll(): void {
+    this.stopped = true;
+  }
+
+  // Resume all brush animations - clears stop flag
+  resumeAll(): void {
+    this.stopped = false;
   }
 
   dispose(): void {

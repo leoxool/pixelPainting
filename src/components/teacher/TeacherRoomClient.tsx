@@ -154,8 +154,8 @@ export function TeacherRoomClient({ room, assets: initialAssets, members = [], o
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#09090b]">
-      {/* Top Bar - hidden when brush group editor is in fullscreen album mode */}
-      <header className={`flex h-14 items-center justify-between border-b border-[#27272a] bg-[#18181b] px-4 ${isBrushGroupFullscreen ? 'hidden' : ''}`}>
+      {/* Top Bar - hidden when brush group editor is in fullscreen album mode or animation stage */}
+      <header className={`flex h-14 items-center justify-between border-b border-[#27272a] bg-[#18181b] px-4 ${isBrushGroupFullscreen || currentStage === 'animation' ? 'hidden' : ''}`}>
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold text-[#fafafa]">
             {room.name || 'Untitled Room'}

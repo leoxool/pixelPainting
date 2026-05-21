@@ -173,7 +173,8 @@ export class MovementController {
     timeline?: gsap.core.Timeline, // Optional external timeline
     timelinePosition: number = 0, // Position on external timeline
     onUpdate?: (brush: AnimatedBrush, position: Vector3) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    staggerMode: 'index' | 'spiral' | 'distance' | 'random' = 'index'
   ) {
     // Kill existing animations (unless they're managed by external timeline)
     if (!timeline) {
@@ -181,7 +182,51 @@ export class MovementController {
     }
 
     const totalBrushes = Math.min(brushes.length, targetPositions.length);
-    console.log('[MovementController] animateToFormation called:', totalBrushes, 'brushes, duration:', duration, 'timeline:', timeline ? 'yes' : 'no');
+
+    // Pre-calculate stagger delays for each brush based on mode
+    const staggerDelays: number[] = [];
+    const centerX = 500; // canvas center X
+    const centerY = 400; // canvas center Y
+
+    brushes.forEach((_, index) => {
+      let delay = 0;
+
+      switch (staggerMode) {
+        case 'spiral': {
+          // Spiral from outside to inside (or inside to outside)
+          const col = index % (Math.ceil(Math.sqrt(totalBrushes)) || 1);
+          const row = Math.floor(index / (Math.ceil(Math.sqrt(totalBrushes)) || 1));
+          const angle = Math.atan2(row - centerY, col - centerX);
+          const dist = Math.sqrt((col - centerX) ** 2 + (row - centerY) ** 2);
+          // Sort by angle + distance for spiral effect
+          delay = (angle + Math.PI) / (2 * Math.PI) * 0.8 + dist * 0.002;
+          break;
+        }
+        case 'distance': {
+          // Distance from center
+          const col = index % (Math.ceil(Math.sqrt(totalBrushes)) || 1);
+          const row = Math.floor(index / (Math.ceil(Math.sqrt(totalBrushes)) || 1));
+          const dist = Math.sqrt((col - centerX) ** 2 + (row - centerY) ** 2);
+          const maxDist = Math.sqrt(centerX ** 2 + centerY ** 2) || 1;
+          delay = (dist / maxDist) * staggerDelay * totalBrushes;
+          break;
+        }
+        case 'random': {
+          // Random delay (seeded by index for consistency)
+          const seed = index * 13.7;
+          delay = (Math.sin(seed) * 43758.5453 % 1) * staggerDelay * totalBrushes;
+          break;
+        }
+        case 'index':
+        default: {
+          // Linear index-based delay
+          delay = index * staggerDelay;
+          break;
+        }
+      }
+
+      staggerDelays.push(delay);
+    });
 
     // Create child timeline for this animation
     const childTl = gsap.timeline({
@@ -198,13 +243,13 @@ export class MovementController {
       const startPos = initialPositions?.[index] || brush.position;
       const proxy = { x: startPos.x, y: startPos.y, z: startPos.z };
 
-      // Each brush gets its own tween with stagger
+      // Each brush gets its own tween with calculated stagger delay
       const tween = gsap.to(proxy, {
         x: targetPos.x,
         y: targetPos.y,
         z: targetPos.z,
         duration,
-        delay: index * staggerDelay,
+        delay: staggerDelays[index],
         ease: easing,
         onUpdate: () => {
           const pos = { x: proxy.x, y: proxy.y, z: proxy.z };

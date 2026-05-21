@@ -1,6 +1,6 @@
-# 动画脚本说明书 v2.0
+# 动画脚本说明书 v2.4
 
-> 本说明书详细介绍了 Pixel 动画系统的脚本语法、22个动画命令的功能参数、时序控制技巧以及电影化镜头语言的实现方法。
+> 本说明书详细介绍了 Pixel 动画系统的脚本语法、24个动画命令的功能参数、时序控制技巧以及电影化镜头语言的实现方法。
 
 ---
 
@@ -193,7 +193,56 @@ CAMERA_ORBIT radius: 1000 speed: 0.15 height: 300 time: 4
 CAMERA_ORBIT radius: 800 speed: 0.5 height: 200 time: 10
 ```
 
-### 3.5 CAMERA_SHAKE - 相机抖动
+### 3.5 CAMERA_ORBIT_ARRAY - 环绕笔刷集群
+
+```javascript
+CAMERA_ORBIT_ARRAY radius: 数值 speed: 数值 [heightOffset: 数值] [duration: 数值] time: N
+```
+
+**参数说明:**
+
+| 参数 | 说明 | 建议值 |
+|------|------|--------|
+| `radius` | 相机到集群中心的轨道半径 | 500-2000 |
+| `speed` | 旋转速度 (弧度/s) | 0.05-0.3 |
+| `heightOffset` | 高度偏移量 | 0-500 |
+| `duration` | 持续时间（秒），0=无限 | 0 |
+
+**核心特性:**
+- **动态包围盒计算**: 实时计算所有笔刷位置的边界框，取中心点作为环绕圆心
+- **跟随集群漂移**: 当笔刷群体移动（如 RANDOM_ROAM）时，相机自动跟随新的包围盒中心
+- **球面轨道**: 相机在三维球面上环绕集群中心，仰角在约 15°-75° 之间振荡
+
+**示例:**
+```javascript
+# 环绕笔刷集群中心 - 适合 RANDOM_ROAM 场景
+RANDOM_ROAM speed: 0.5 amplitude: 200 time: 0
+CAMERA_ORBIT_ARRAY radius: 800 speed: 0.15 time: 0
+
+# 带高度偏移的环绕
+CAMERA_ORBIT_ARRAY radius: 600 speed: 0.2 heightOffset: 100 time: 0 duration: 10
+
+# 快速环绕特写
+CAMERA_ORBIT_ARRAY radius: 400 speed: 0.4 heightOffset: 50 time: 5 duration: 5
+```
+
+**典型应用:**
+```javascript
+# 场景1: 笔刷漫游 + 集群环绕
+RANDOM_ROAM speed: 0.3 amplitude: 150 time: 0
+CAMERA_ORBIT_ARRAY radius: 700 speed: 0.1 heightOffset: 50 time: 0
+
+# 场景2: 参考图聚合 + 环绕
+FORMATION type: reference index: 0 stagger: 0.02 staggerMode: spiral time: 0 duration: 5
+CAMERA_ORBIT_ARRAY radius: 1000 speed: 0.08 heightOffset: 100 time: 5
+
+# 场景3: 拼图效果 + 环绕
+RANDOM_ROAM speed: 0.2 amplitude: 100 time: 0
+CAMERA_ORBIT_ARRAY radius: 600 speed: 0.12 time: 0
+FORMATION type: reference index: 0 stagger: 0.03 staggerMode: distance time: 2 duration: 6
+```
+
+### 3.7 CAMERA_SHAKE - 相机抖动
 
 ```javascript
 CAMERA_SHAKE intensity: 数值 frequency: 数值 duration: 数值 time: N
@@ -216,7 +265,57 @@ CAMERA_SHAKE intensity: 5 frequency: 5 duration: 0.5 time: 3
 CAMERA_SHAKE intensity: 30 frequency: 10 duration: 1 time: 8
 ```
 
-### 3.6 CAMERA_PATH - 路径动画
+### 3.8 CAMERA_FOLLOW - 跟随目标笔刷
+
+```javascript
+CAMERA_FOLLOW target: brush_id | random offset: {x, y, z} lookAhead: 数值 time: N
+```
+
+**参数说明:**
+
+| 参数 | 说明 | 建议值 |
+|------|------|--------|
+| `target` | 目标笔刷 ID，或 `random` 随机选择 | `random` |
+| `offset` | 相机相对于目标笔刷的偏移位置 | `{0, 100, 300}` |
+| `lookAhead` | 向前预瞄距离，让镜头更有运动感 | 0-100 |
+
+**跟随模式说明:**
+
+当 `target: random` 时，相机在脚本执行时随机选择一个笔刷作为跟随目标，之后一直跟随该笔刷。
+
+**offset 坐标解释：**
+- **x** → 相机在笔刷 X 轴方向的偏移（正数向右）
+- **y** → 相机在笔刷 Y 轴方向的偏移（正数向上）
+- **z** → 相机在笔刷 Z 轴方向的偏移（正数向前，即靠近相机方向的反方向）
+
+**示例:**
+```javascript
+# 基础跟随 - 随机选择一个笔刷跟拍
+CAMERA_FOLLOW target: random offset: {0, 100, 300} lookAhead: 50 time: 0
+
+# 特写跟随 - 近距离跟拍
+CAMERA_FOLLOW target: random offset: {0, 50, 150} lookAhead: 20 time: 0
+
+# 高位跟拍 - 俯视角度
+CAMERA_FOLLOW target: random offset: {0, 200, 400} lookAhead: 30 time: 0
+
+# 跟随特定笔刷
+CAMERA_FOLLOW target: brush_50 offset: {0, 80, 200} lookAhead: 30 time: 0
+```
+
+**典型应用场景:**
+```javascript
+# 笔刷随机漫游 + 相机跟拍
+RANDOM_ROAM speed: 0.5 amplitude: 200 time: 0
+CAMERA_FOLLOW target: random offset: {0, 100, 300} lookAhead: 50 time: 0
+
+# 多阶段跟拍 - 每10秒切换一次跟随目标
+RANDOM_ROAM speed: 0.5 amplitude: 200 time: 0
+CAMERA_FOLLOW target: random offset: {0, 80, 200} lookAhead: 30 time: 0
+CAMERA_FOLLOW target: random offset: {0, 80, 200} lookAhead: 30 time: 10
+```
+
+### 3.9 CAMERA_PATH - 路径动画
 
 ```javascript
 CAMERA_PATH points: [{x1,y1,z1},{x2,y2,z2},{x3,y3,z3}] time: N duration: M
@@ -231,7 +330,7 @@ CAMERA_PATH points: [{0,0,1000},{500,500,800},{1000,0,1000}] time: 2 duration: 5
 CAMERA_PATH points: [{0,0,1000},{500,800,600},{1000,0,1000}] time: 0 duration: 4
 ```
 
-### 3.7 ORBIT_BRUSH - 环绕笔刷
+### 3.10 ORBIT_BRUSH - 环绕笔刷
 
 ```javascript
 ORBIT_BRUSH brushId: ID radius: 数值 speed: 数值 height: 数值 time: N
@@ -242,7 +341,7 @@ ORBIT_BRUSH brushId: ID radius: 数值 speed: 数值 height: 数值 time: N
 ORBIT_BRUSH brushId: brush_50 radius: 200 speed: 0.2 height: 50 time: 5
 ```
 
-### 3.8 RANDOM_FOLLOW - 随机跟随
+### 3.11 RANDOM_FOLLOW - 随机跟随
 
 ```javascript
 RANDOM_FOLLOW speed: 数值 radius: 数值 time: N duration: M
@@ -254,7 +353,7 @@ RANDOM_FOLLOW speed: 数值 radius: 数值 time: N duration: M
 RANDOM_FOLLOW speed: 0.5 radius: 300 time: 3 duration: 10
 ```
 
-### 3.9 RANDOM_ORBIT_BRUSH - 随机目标环绕
+### 3.12 RANDOM_ORBIT_BRUSH - 随机目标环绕
 
 ```javascript
 RANDOM_ORBIT_BRUSH radius: 数值 speed: 数值 [height: 数值] time: N duration: M
@@ -475,6 +574,47 @@ BEZIER_FLIGHT cp1: {0,0,0} cp2: {500,300,100} cp3: {1000,0,0} time: 0 duration: 
 BEZIER_FLIGHT cp1: {0,500,0} cp2: {500,-200,200} cp3: {1000,500,0} time: 3 duration: 4
 ```
 
+### 5.5 FORMATION - 队形变换
+
+```javascript
+FORMATION type: grid|circle|line|scatter spacing: 数值 time: N duration: M
+FORMATION type: reference index: 数值 time: N duration: M [stagger: 数值] [staggerMode: index|spiral|distance|random]
+```
+
+**参数说明:**
+
+| 参数 | 说明 | 建议值 |
+|------|------|--------|
+| `type` | 队形类型: `grid`(网格), `circle`(圆形), `line`(直线), `scatter`(散开), `reference`(参考图) | - |
+| `spacing` | 笔刷间距 (非 reference 类型) | 30-100 |
+| `index` | 参考图索引 (reference 类型) | 0 |
+| `stagger` | 每个笔刷的延迟间隔秒数 | 0.001-0.1 |
+| `staggerMode` | 错落模式: `index`(按索引), `spiral`(螺旋), `distance`(从中心向外), `random`(随机) | index |
+
+**staggerMode 效果说明:**
+
+| 模式 | 效果 |
+|------|------|
+| `index` | 按笔刷索引顺序依次启动，线性延迟 |
+| `spiral` | 螺旋式聚合，像漩涡一样从外向内或从内向外 |
+| `distance` | 从画布中心向外扩散，距离中心越远的先启动 |
+| `random` | 随机顺序，每个笔刷的启动时间随机但可重现 |
+
+**示例:**
+```javascript
+# 聚合成圆形 - 均匀延迟
+FORMATION type: circle spacing: 50 time: 0 duration: 3
+
+# 聚合成参考图 - 拼图效果（螺旋式）
+FORMATION type: reference index: 0 stagger: 0.02 staggerMode: spiral time: 0 duration: 5
+
+# 从中心向外扩散
+FORMATION type: reference index: 0 stagger: 0.01 staggerMode: distance time: 0 duration: 4
+
+# 随机拼图效果
+FORMATION type: reference index: 0 stagger: 0.03 staggerMode: random time: 0 duration: 6
+```
+
 ---
 
 ## 6. 单笔刷控制
@@ -505,10 +645,10 @@ ROTATE_BRUSH axis: y speed: 120 time: 0 duration: 2
 ROTATE_BRUSH axis: x speed: 60 time: 5 duration: 4
 ```
 
-### 6.2 RANDOM_ROAM - 笔刷随机漫游
+### 6.2 RANDOM_ROAM - 笔刷随机漫游（鱼游姿态）
 
 ```javascript
-RANDOM_ROAM speed: 数值 amplitude: 数值 [changeInterval: 数值] [rotationSpeed: 数值] [duration: 数值] time: N
+RANDOM_ROAM speed: 数值 amplitude: 数值 [rangeX: 数值] [rangeY: 数值] [rangeZ: 数值] [swimSpeed: 数值] [duration: 数值] time: N
 ```
 
 **参数说明:**
@@ -516,20 +656,38 @@ RANDOM_ROAM speed: 数值 amplitude: 数值 [changeInterval: 数值] [rotationSp
 | 参数 | 说明 |
 |------|------|
 | `speed` | 移动速度 |
-| `amplitude` | 漫游幅度 (离原始位置的最大偏移) |
-| `changeInterval` | 方向切换间隔 (秒，默认2) |
-| `rotationSpeed` | 旋转速度倍率 (默认1.0，值越大旋转越快) |
+| `amplitude` | 漫游幅度基数 (各轴实际范围 = amplitude × rangeAxis) |
+| `rangeX` | X轴范围倍数 (默认1.0, 范围 ±amplitude) |
+| `rangeY` | Y轴范围倍数 (默认0.7, 范围 ±amplitude×0.7) |
+| `rangeZ` | Z轴范围倍数 (默认0.3, 范围 ±amplitude×0.3) |
+| `swimSpeed` | 游动摆动速度倍率 (默认1.0) |
 | `duration` | 持续时间 (秒) |
 
-**行为:** 每个笔刷在三维空间中进行随机漫游运动，包含三个轴向的独立随机旋转。
+**多阶段动画:** 可通过多个 RANDOM_ROAM 命令实现多阶段运动，每阶段使用不同参数。例如：
+
+```javascript
+# 第一阶段：缓慢游动
+RANDOM_ROAM speed: 0.3 amplitude: 100 time: 0
+
+# 第二阶段：快速冲刺
+RANDOM_ROAM speed: 0.8 amplitude: 150 time: 10
+
+# 第三阶段：恢复平静
+RANDOM_ROAM speed: 0.2 amplitude: 80 time: 20
+```
+
+**行为:** 每个笔刷像鱼一样在三维空间游动，头部始终对准运动方向，并伴随轻微的左右摆动和上下起伏。可独立控制各轴的运动范围。
 
 **示例:**
 ```javascript
-# 缓慢漫游
-RANDOM_ROAM speed: 0.3 amplitude: 80 time: 0 duration: 6
+# 均匀三维漫游（鱼游姿态）
+RANDOM_ROAM speed: 0.3 amplitude: 100 rangeX: 1 rangeY: 1 rangeZ: 1 swimSpeed: 1 time: 0 duration: 10
 
-# 快速漫游且旋转加速
-RANDOM_ROAM speed: 0.8 amplitude: 120 rotationSpeed: 1.5 time: 3 duration: 5
+# 缓慢优雅游动
+RANDOM_ROAM speed: 0.2 amplitude: 80 swimSpeed: 0.6 time: 0 duration: 15
+
+# 快速穿梭
+RANDOM_ROAM speed: 0.6 amplitude: 120 swimSpeed: 1.5 rangeX: 1 rangeY: 0.5 rangeZ: 0.3 time: 0
 ```
 
 ---
@@ -819,8 +977,8 @@ CAMERA_SHAKE intensity: 3 frequency: 4 duration: 0.5 time: 9
 ### 9.3 环绕镜头
 
 ```javascript
-# 开始队形
-FORMATION type: reference index: 0 time: 0 duration: 3
+# 开始队形 - 拼图式聚合效果
+FORMATION type: reference index: 0 stagger: 0.02 staggerMode: spiral time: 0 duration: 5
 
 # 相机开始环绕
 CAMERA_MODE mode: orbit time: 3
@@ -1120,7 +1278,9 @@ VIGNETTE darkness: 1.4 offset: 1.1 time: 26 duration: 2
 | `CAMERA` | 相机位置/注视点移动 |
 | `CAMERA_ZOOM` | FOV焦距变化 |
 | `CAMERA_MODE` | 相机模式切换 |
+| `CAMERA_FOLLOW` | 跟随目标笔刷 |
 | `CAMERA_ORBIT` | 环绕轨道运动 |
+| `CAMERA_ORBIT_ARRAY` | 环绕笔刷集群中心 |
 | `CAMERA_SHAKE` | 相机抖动 |
 | `CAMERA_PATH` | 路径动画 |
 | `ORBIT_BRUSH` | 环绕笔刷 |
@@ -1145,6 +1305,7 @@ VIGNETTE darkness: 1.4 offset: 1.1 time: 26 duration: 2
 | `AERIAL_DANCE` | 空中舞蹈 |
 | `ORBIT_AXIS` | 轴向环绕 |
 | `BEZIER_FLIGHT` | 贝塞尔飞行 |
+| `FORMATION` | 队形变换（支持 stagger 拼图效果） |
 
 ### 单笔刷控制
 
@@ -1183,5 +1344,5 @@ VIGNETTE darkness: 1.4 offset: 1.1 time: 26 duration: 2
 
 ---
 
-*文档版本: 2.1*
-*更新时间: 2026-05-18*
+*文档版本: 2.4*
+*更新时间: 2026-05-20*

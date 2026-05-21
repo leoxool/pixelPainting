@@ -52,6 +52,7 @@ export function parseExtendedScript(scriptText: string): ExtendedParsedScript {
 
 function parseExtendedLine(line: string): ExtendedScriptCommand | null {
   // CAMERA_FOLLOW: CAMERA_FOLLOW target: brush_50 offset: {0, 2, 5} lookAhead: 3 time: 0
+  //   or: CAMERA_FOLLOW target: random offset: {0, 2, 5} lookAhead: 3 time: 0
   const followMatch = line.match(
     /^CAMERA_FOLLOW\s+target:\s*(\S+)\s+offset:\s*\{([^}]+)\}\s+lookAhead:\s*([\d.]+)\s+time:\s*([\d.]+)/i
   );
@@ -89,6 +90,24 @@ function parseExtendedLine(line: string): ExtendedScriptCommand | null {
         radius: parseFloat(orbitMatch[1]),
         speed: parseFloat(orbitMatch[2]),
         height: parseFloat(orbitMatch[3]),
+      },
+    };
+  }
+
+  // CAMERA_ORBIT_ARRAY: CAMERA_ORBIT_ARRAY radius: 800 speed: 0.15 [heightOffset: 50] [duration: 10] time: 0
+  // Orbits camera around the dynamic center of the entire brush cluster (bounding box center)
+  const orbitArrayMatch = line.match(
+    /^CAMERA_ORBIT_ARRAY\s+radius:\s*([\d.]+)\s+speed:\s*([\d.]+)(\s+heightOffset:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?\s+time:\s*([\d.]+)/i
+  );
+  if (orbitArrayMatch) {
+    return {
+      type: 'CAMERA_ORBIT_ARRAY',
+      time: parseFloat(orbitArrayMatch[7]),
+      params: {
+        radius: parseFloat(orbitArrayMatch[1]),
+        speed: parseFloat(orbitArrayMatch[2]),
+        heightOffset: parseFloat(orbitArrayMatch[4] || '0'),
+        duration: parseFloat(orbitArrayMatch[6] || '0'), // 0 = indefinite
       },
     };
   }
@@ -142,45 +161,16 @@ function parseExtendedLine(line: string): ExtendedScriptCommand | null {
   }
 
   // FORMATION: FORMATION type: grid|circle|line|scatter spacing: 50 time: 0 duration: 3
-  // REFERENCE_FORM: FORMATION type: reference index: 0 time: 0 duration: 3 (聚合到参考图)
-  const formationMatch = line.match(
-    /^FORMATION\s+type:\s*(\w+)\s+spacing:\s*([\d.]+)\s+time:\s*([\d.]+)(\s+duration:\s*([\d.]+))?/i
-  );
-  if (formationMatch) {
-    const formationType = formationMatch[1].toLowerCase();
-    const isReference = formationType === 'reference' || formationType === 'ref';
+  // REFERENCE_FORM: FORMATION type: reference index: 0 time: 0 duration: 3 [stagger: 0.02] [staggerMode: spiral]
+  // STAGGER_MODES: index (default), spiral, distance, random
 
-    if (isReference) {
-      // REFERENCE_FORM: 聚合到参考图 - use index instead of spacing
-      const refIndexMatch = line.match(/index:\s*(\d+)/i);
-      const refIndex = refIndexMatch ? parseInt(refIndexMatch[1]) : 0;
-      return {
-        type: 'FORMATION',
-        time: parseFloat(formationMatch[3]),
-        params: {
-          formationType: 'reference',
-          refIndex,
-          duration: parseFloat(formationMatch[5] || '3'),
-        },
-      };
-    }
-
-    return {
-      type: 'FORMATION',
-      time: parseFloat(formationMatch[3]),
-      params: {
-        formationType: formationMatch[1],
-        spacing: parseFloat(formationMatch[2]),
-        duration: parseFloat(formationMatch[5] || '3'),
-      },
-    };
-  }
-
-  // Also handle FORMATION type: reference without spacing (different syntax)
+  // FIRST: Check for REFERENCE formation (no spacing parameter)
   const refFormationMatch = line.match(
-    /^FORMATION\s+type:\s*(reference|ref)\s+index:\s*(\d+)\s+time:\s*([\d.]+)(\s+duration:\s*([\d.]+))?/i
+    /^FORMATION\s+type:\s*(reference|ref)\s+index:\s*(\d+)\s+time:\s*([\d.]+)(\s+duration:\s*([\d.]+))?(\s+stagger:\s*([\d.]+))?(\s+staggerMode:\s*(\w+))?/i
   );
   if (refFormationMatch) {
+    const staggerMatch = line.match(/stagger:\s*([\d.]+)/i);
+    const staggerModeMatch = line.match(/staggerMode:\s*(\w+)/i);
     return {
       type: 'FORMATION',
       time: parseFloat(refFormationMatch[3]),
@@ -188,6 +178,24 @@ function parseExtendedLine(line: string): ExtendedScriptCommand | null {
         formationType: 'reference',
         refIndex: parseInt(refFormationMatch[2]),
         duration: parseFloat(refFormationMatch[5] || '3'),
+        stagger: staggerMatch ? parseFloat(staggerMatch[1]) : 0,
+        staggerMode: staggerModeMatch ? staggerModeMatch[1].toLowerCase() : 'index',
+      },
+    };
+  }
+
+  // SECOND: Check for regular formation (with spacing parameter)
+  const formationMatch = line.match(
+    /^FORMATION\s+type:\s*(\w+)\s+spacing:\s*([\d.]+)\s+time:\s*([\d.]+)(\s+duration:\s*([\d.]+))?(\s+stagger:\s*([\d.]+))?(\s+staggerMode:\s*(\w+))?/i
+  );
+  if (formationMatch) {
+    return {
+      type: 'FORMATION',
+      time: parseFloat(formationMatch[3]),
+      params: {
+        formationType: formationMatch[1],
+        spacing: parseFloat(formationMatch[2]),
+        duration: parseFloat(formationMatch[5] || '3'),
       },
     };
   }
@@ -664,18 +672,20 @@ function parseExtendedLine(line: string): ExtendedScriptCommand | null {
 
 // Original parser for backwards compatibility
 function parseBasicLine(line: string): ExtendedScriptCommand | null {
-  // CAMERA command
+  // CAMERA command (supports: position, lookAt, fov, time, duration, transition)
   const cameraMatch = line.match(
-    /^CAMERA\s+position:\s*\{([^}]+)\}\s+lookAt:\s*\{([^}]+)\}(\s+time:\s*([\d.]+))?(\s+transition:\s*(\w+))?/i
+    /^CAMERA\s+position:\s*\{([^}]+)\}\s+lookAt:\s*\{([^}]+)\}(\s+fov:\s*([\d.]+))?(\s+time:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?(\s+transition:\s*(\w+))?/i
   );
   if (cameraMatch) {
     return {
       type: 'CAMERA_MOVE',
-      time: parseFloat(cameraMatch[4] || '0'),
+      time: parseFloat(cameraMatch[5] || '0'),
       params: {
         position: parseVector(cameraMatch[1]),
         lookAt: parseVector(cameraMatch[2]),
-        transition: cameraMatch[6] || 'ease-in-out',
+        fov: cameraMatch[4] ? parseFloat(cameraMatch[4]) : undefined,
+        duration: cameraMatch[6] ? parseFloat(cameraMatch[6]) : undefined,
+        transition: cameraMatch[7] || 'ease-in-out',
       },
     };
   }
@@ -762,18 +772,22 @@ function parseBasicLine(line: string): ExtendedScriptCommand | null {
     };
   }
 
-  // RANDOM_ROAM: RANDOM_ROAM speed: 0.4 amplitude: 150 [changeInterval: 2] [rotationSpeed: 1.5] [duration: 5] time: 0
-  const roamMatch = line.match(/^RANDOM_ROAM\s+speed:\s*([\d.]+)\s+amplitude:\s*([\d.]+)(\s+changeInterval:\s*([\d.]+))?(\s+rotationSpeed:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?\s+time:\s*([\d.]+)/i);
+  // RANDOM_ROAM: RANDOM_ROAM speed: 0.4 amplitude: 150 [changeInterval: 2] [rotationSpeed: 1.5] [rangeX: 1] [rangeY: 0.7] [rangeZ: 0.3] [swimSpeed: 1] [duration: 5] time: 0
+  const roamMatch = line.match(/^RANDOM_ROAM\s+speed:\s*([\d.]+)\s+amplitude:\s*([\d.]+)(\s+changeInterval:\s*([\d.]+))?(\s+rotationSpeed:\s*([\d.]+))?(\s+rangeX:\s*([\d.]+))?(\s+rangeY:\s*([\d.]+))?(\s+rangeZ:\s*([\d.]+))?(\s+swimSpeed:\s*([\d.]+))?(\s+duration:\s*([\d.]+))?\s+time:\s*([\d.]+)/i);
   if (roamMatch) {
     return {
       type: 'RANDOM_ROAM',
-      time: parseFloat(roamMatch[9] || '0'),
+      time: parseFloat(roamMatch[17] || '0'),
       params: {
         speed: parseFloat(roamMatch[1]),
         amplitude: parseFloat(roamMatch[2]),
         changeInterval: parseFloat(roamMatch[4] || '2'),
         rotationSpeed: parseFloat(roamMatch[6] || '1'),
-        duration: parseFloat(roamMatch[8] || '5'),
+        rangeX: parseFloat(roamMatch[8] || '1'),
+        rangeY: parseFloat(roamMatch[10] || '0.7'),
+        rangeZ: parseFloat(roamMatch[12] || '0.3'),
+        swimSpeed: parseFloat(roamMatch[14] || '1'),
+        duration: parseFloat(roamMatch[16] || '5'),
       },
     };
   }

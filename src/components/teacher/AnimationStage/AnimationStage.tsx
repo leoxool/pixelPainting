@@ -101,6 +101,13 @@ export function AnimationStage({
   // Brush positions for camera tracking
   const brushPositionsRef = useRef<Map<string, Vector3>>(new Map());
 
+  // Preview animation refs (runs before script starts)
+  const previewCleanupRef = useRef<(() => void) | null>(null);
+  const previewIsRunningRef = useRef(false);
+
+  // Shared tick proxy for roam animation
+  const roamTickProxyRef = useRef<{ t: number }>({ t: 0 });
+
   // Track last formation reference to detect material-only changes
   const lastFormationRefIdRef = useRef<string | null>(null);
 
@@ -207,7 +214,7 @@ FORMATION type: reference index: 0 time: 19 duration: 3
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
-    renderer.setClearColor(0x444444, 1);
+    renderer.setClearColor(0x000000, 1);
     renderer.domElement.style.position = 'absolute';
     renderer.domElement.style.top = '0';
     renderer.domElement.style.left = '0';
@@ -218,15 +225,15 @@ FORMATION type: reference index: 0 time: 19 duration: 3
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Scene - Minimalist Photography Stage (High-key, Creamy White)
+    // Scene - Dark background for dramatic effect
     const scene = new THREE.Scene();
 
-    // Creamy white background - high-key photography style
-    const creamyWhite = 0xFFF8F0; // Warm creamy white
-    scene.background = new THREE.Color(creamyWhite);
+    // Black background for animation mode
+    const sceneBackground = 0x000000; // Pure black
+    scene.background = new THREE.Color(sceneBackground);
 
     // Fog for seamless infinite extension (matches background)
-    scene.fog = new THREE.Fog(creamyWhite, 800, 2500);
+    scene.fog = new THREE.Fog(sceneBackground, 800, 2500);
 
     sceneRef.current = scene;
 
@@ -393,28 +400,83 @@ FORMATION type: reference index: 0 time: 19 duration: 3
     setBrushes(newBrushes);
     console.log('[AnimationStage] Created', newBrushes.length, 'brushes');
 
-    // Set initial positions - show target formation as preview (hidden until animation starts)
+    // Set initial positions HIDDEN - will be revealed by preview or script animation
     const initDummy = new THREE.Object3D();
     meshsByLevel.forEach((mesh, level) => {
       for (let i = 0; i < gridSizeX * gridSizeY; i++) {
-        const brush = newBrushes[i];
-        if (brush.level === level) {
-          // Show in target position for preview
-          initDummy.position.set(brush.targetPosition.x, brush.targetPosition.y, brush.targetPosition.z);
-          initDummy.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
-          initDummy.updateMatrix();
-          mesh.setMatrixAt(i, initDummy.matrix);
-        } else {
-          // Hide brushes that don't belong to this level
-          initDummy.position.set(-5000, -5000, 0);
-          initDummy.scale.set(0, 0, 1);
-          initDummy.updateMatrix();
-          mesh.setMatrixAt(i, initDummy.matrix);
-        }
+        // Hide all brushes initially - preview animation will reveal them
+        initDummy.position.set(-5000, -5000, 0);
+        initDummy.scale.set(0, 0, 1);
+        initDummy.rotation.set(0, 0, 0);
+        initDummy.updateMatrix();
+        mesh.setMatrixAt(i, initDummy.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
       scene.add(mesh);
     });
+
+    // Start preview animation: slow random roam with camera dolly
+    // This runs until user starts a script animation
+    const previewTimeline = gsap.timeline({ repeat: -1, yoyo: true });
+    const previewProxy = { roamT: 0, cameraZ: 300 }; // Start at furthest (300), dolly in to 140
+    let previewRoamAngle = 0;
+    let previewRoamTime = 0;
+
+    previewTimeline.to(previewProxy, {
+      cameraZ: 140, // Dolly in to 140, yoyo will go back to 300
+      duration: 8,
+      ease: 'sine.inOut',
+      onUpdate: () => {
+        if (cameraRef.current && gridCenterRef.current) {
+          // Camera always faces the grid center during preview
+          cameraRef.current.position.set(gridCenterRef.current.x, gridCenterRef.current.y, previewProxy.cameraZ);
+          cameraRef.current.lookAt(gridCenterRef.current.x, gridCenterRef.current.y, gridCenterRef.current.z);
+        }
+      }
+    }, 0);
+
+    // Preview: slow roam animation running continuously
+    let previewAnimFrame: number;
+    const runPreviewRoam = () => {
+      if (!brushChoreographerRef.current || !dummyRef.current) {
+        previewAnimFrame = requestAnimationFrame(runPreviewRoam);
+        return;
+      }
+      previewRoamTime += 0.016; // ~60fps
+      const roamParams = {
+        speed: 0.2,
+        amplitude: 300,
+        rangeX: 0.5,
+        rangeY: 0.4,
+        rangeZ: 0.2,
+        swimSpeed: 0.8,
+      };
+      brushChoreographerRef.current.randomRoamBrushes(
+        newBrushes,
+        roamParams,
+        previewRoamTime,
+        (brush, pos) => {
+          const mesh = meshsByLevel[brush.level];
+          if (mesh && dummyRef.current) {
+            dummyRef.current.position.set(pos.x, pos.y, pos.z);
+            dummyRef.current.scale.set(brushSize, brushSize, 1);
+            dummyRef.current.updateMatrix();
+            mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+          }
+          brushPositionsRef.current.set(brush.id, pos);
+        }
+      );
+      meshsByLevel.forEach(mesh => { mesh.instanceMatrix.needsUpdate = true; });
+      previewAnimFrame = requestAnimationFrame(runPreviewRoam);
+    };
+    runPreviewRoam();
+
+    // Store preview cleanup
+    previewCleanupRef.current = () => {
+      if (previewAnimFrame) cancelAnimationFrame(previewAnimFrame);
+      previewTimeline.kill();
+    };
+    previewIsRunningRef.current = true;
 
     // Render loop with advanced animation updates
     let lastTime = performance.now();
@@ -429,14 +491,17 @@ FORMATION type: reference index: 0 time: 19 duration: 3
           cameraControllerRef.current.update(deltaTime, brushPositionsRef.current);
         }
 
-        // Camera follows grid center only when NOT in orbit mode
-        if (cameraRef.current && gridCenterRef.current && !cameraControllerRef.current?.isInRandomOrbitMode()) {
-          const cam = cameraRef.current;
-          const center = gridCenterRef.current;
-          // Keep z position fixed, xy follows center
-          cam.position.x = center.x;
-          cam.position.y = center.y;
-          cam.lookAt(center.x, center.y, center.z);
+        // Camera follows grid center only when NOT in orbit mode and NOT in follow mode and NOT in preview
+        if (cameraRef.current && gridCenterRef.current && !cameraControllerRef.current?.isInRandomOrbitMode() && !previewIsRunningRef.current) {
+          const mode = cameraControllerRef.current?.getMode?.();
+          if (mode !== 'follow') {
+            const cam = cameraRef.current;
+            const center = gridCenterRef.current;
+            // Keep z position fixed, xy follows center
+            cam.position.x = center.x;
+            cam.position.y = center.y;
+            cam.lookAt(center.x, center.y, center.z);
+          }
         }
 
         // Render with post-processing if enabled
@@ -467,6 +532,8 @@ FORMATION type: reference index: 0 time: 19 duration: 3
       brushChoreographerRef.current?.dispose();
       arrayControllerRef.current?.dispose();
       transitionEffectsRef.current?.dispose();
+      // Stop preview animation
+      previewCleanupRef.current?.();
       // Reset init flag so next init can happen with new grid size
       isInitializedRef.current = false;
     };
@@ -481,6 +548,12 @@ FORMATION type: reference index: 0 time: 19 duration: 3
     console.log('[AnimationStage] - offsetRef:', offsetRef.current);
     console.log('[AnimationStage] - brushSizeRef:', brushSizeRef.current);
     if (stageState.isPlaying) return;
+
+    // Stop preview animation before starting script animation
+    if (previewCleanupRef.current && previewIsRunningRef.current) {
+      previewCleanupRef.current();
+      previewIsRunningRef.current = false;
+    }
 
     setStageState(prev => ({ ...prev, status: 'playing', isPlaying: true }));
 
@@ -672,6 +745,43 @@ FORMATION type: reference index: 0 time: 19 duration: 3
         },
       }, 1.5);
     });
+
+    // Get camera reference for all phases
+    const cam = cameraRef.current;
+
+    // Phase 0: Camera quickly zoom in close to brushes (~100 distance) at start
+    console.log('[AnimationStage] Phase 0: Camera zoom close');
+    if (cam) {
+      tl.to(cam.position, {
+        z: 100,
+        duration: 0.5,
+        ease: 'power2.in',
+      }, 0);
+    }
+
+    // Phase 3: Camera dolly out during formation (1.5-4.5s) to show full reference image
+    console.log('[AnimationStage] Phase 3: Camera dolly out');
+    if (cam) {
+      // Calculate camera Z position to fit full reference image in view
+      const refCols = currentRef.gridSizeX;
+      const refRows = currentRef.gridSizeY;
+      const refWidth = refCols * formationBrushSize;
+      const refHeight = refRows * formationBrushSize;
+      // Target Z to see full reference with margin: based on larger dimension
+      const targetZ = Math.max(refWidth, refHeight) * 1.2;
+
+      // Camera gradually pulls back during the formation animation
+      tl.to(cam.position, {
+        z: targetZ,
+        duration: 3,
+        ease: 'power1.out',
+      }, 1.5);
+
+      // Also center the camera lookAt on the reference image
+      if (cameraControllerRef.current) {
+        cameraControllerRef.current.setLookAt(width / 2, height / 2, 0);
+      }
+    }
 
     timelineRef.current = tl;
     tl.play();
@@ -937,7 +1047,7 @@ CAMERA_MODE mode: orbit time: 15
   // Execute animation script - main function to run script commands
   // All commands are added to a single GSAP timeline for unified play/pause/seek
   const executeScript = useCallback((scriptText: string) => {
-    console.log('[AnimationStage] Executing script...');
+    console.log('[AnimationStage] ========== EXECUTING SCRIPT ==========');
     console.log('[AnimationStage] Script length:', scriptText.length, 'chars');
 
     if (!scriptText.trim()) {
@@ -948,6 +1058,7 @@ CAMERA_MODE mode: orbit time: 15
     const parsed = parseAdvancedScript(scriptText);
     console.log('[AnimationStage] Parsed', parsed.commands.length, 'commands, duration:', parsed.duration, 's');
     console.log('[AnimationStage] Markers:', Array.from(parsed.markers.keys()).join(', '));
+    console.log('[AnimationStage] Commands:', parsed.commands.map(c => `${c.type}@${c.time}s`).join(', '));
 
     // Calculate formation brush size based on animation grid for consistent sizing
     const canvasWidth = dimensionsRef.current.width;
@@ -956,6 +1067,34 @@ CAMERA_MODE mode: orbit time: 15
 
     // Stop any existing animations first
     timelineRef.current?.kill();
+
+    // CRITICAL: Stop BOTH preview animation AND brush choreographer roaming before script runs
+    // This prevents preview loop from overwriting script animations
+    if (previewCleanupRef.current && previewIsRunningRef.current) {
+      previewCleanupRef.current();
+      previewIsRunningRef.current = false;
+    }
+    // Also stop the brush choreographer to prevent any residual roaming
+    brushChoreographerRef.current?.stopAll();
+
+    // CRITICAL: Reset all brushes to hidden position and clear state before running new script
+    // This prevents contamination from previous animations (including default load animation)
+    if (dummyRef.current) {
+      instancedMeshesRef.current.forEach((mesh) => {
+        for (let i = 0; i < gridSizeX * gridSizeY; i++) {
+          dummyRef.current!.position.set(-5000, -5000, 0);
+          dummyRef.current!.scale.set(0, 0, 1);
+          dummyRef.current!.rotation.set(0, 0, 0);
+          dummyRef.current!.updateMatrix();
+          mesh.setMatrixAt(i, dummyRef.current!.matrix);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+      });
+    }
+    // Clear position tracking and stop any running choreographers
+    brushPositionsRef.current.clear();
+    movementControllerRef.current?.stopAll();
+    brushChoreographerRef.current?.stopAll(); // Double-check stop roaming
 
     // Create single master timeline for ALL animations
     const masterTimeline = gsap.timeline({
@@ -1010,12 +1149,12 @@ CAMERA_MODE mode: orbit time: 15
               x: pos.x, y: pos.y, z: pos.z,
               duration: moveDuration,
               ease: transition === 'linear' ? 'none' : `power2.${transition === 'ease-in-out' ? 'inOut' : 'out'}`,
-            }, index);
+            }, cmdTime);
 
             // LookAt target - set at end of movement
             masterTimeline.call(() => {
               cameraControllerRef.current?.setLookAt(lookAt.x, lookAt.y, lookAt.z);
-            }, [], index + 0.99);
+            }, [], cmdTime + moveDuration - 0.01);
 
             // FOV animation if specified
             if (cmd.params.fov) {
@@ -1024,7 +1163,7 @@ CAMERA_MODE mode: orbit time: 15
                 onStart: () => {
                   cameraControllerRef.current?.animateFov(cmd.params.fov as number, moveDuration);
                 }
-              }, index);
+              }, cmdTime);
             }
           }
           break;
@@ -1033,7 +1172,7 @@ CAMERA_MODE mode: orbit time: 15
         case 'CAMERA_MODE':
           masterTimeline.call(() => {
             cameraControllerRef.current?.setMode(cmd.params.mode as 'fixed' | 'follow' | 'orbit');
-          }, [], index);
+          }, [], cmdTime);
           break;
 
         case 'CAMERA_ORBIT': {
@@ -1045,18 +1184,38 @@ CAMERA_MODE mode: orbit time: 15
               height: cmd.params.height as number || 0,
             });
             cameraControllerRef.current?.startOrbit();
-          }, [], index);
+          }, [], cmdTime);
+          break;
+        }
+
+        case 'CAMERA_ORBIT_ARRAY': {
+          masterTimeline.call(() => {
+            cameraControllerRef.current?.startOrbitAroundCluster(
+              brushes,
+              cmd.params.radius as number || 800,
+              cmd.params.speed as number || 0.15,
+              cmd.params.heightOffset as number || 0,
+              cmd.params.duration as number || 0
+            );
+          }, [], cmdTime);
           break;
         }
 
         case 'CAMERA_FOLLOW':
           masterTimeline.call(() => {
+            let targetBrushId = cmd.params.target as string;
+            // If target is "random", pick a random brush
+            if (targetBrushId === 'random' && brushes.length > 0) {
+              const randomIndex = Math.floor(Math.random() * brushes.length);
+              targetBrushId = brushes[randomIndex].id;
+            }
             cameraControllerRef.current?.setFollowTarget({
-              brushId: cmd.params.target as string,
+              brushId: targetBrushId,
               offset: cmd.params.offset as { x: number; y: number; z: number },
               lookAhead: cmd.params.lookAhead as number,
             });
-          }, [], index);
+            cameraControllerRef.current?.setMode('follow');
+          }, [], cmdTime);
           break;
 
         case 'CAMERA_ZOOM':
@@ -1105,7 +1264,11 @@ CAMERA_MODE mode: orbit time: 15
         }
 
         case 'FORMATION': {
-          if (!movementControllerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          console.log('[FORMATION] time:', cmdTime, 'params:', JSON.stringify(cmd.params));
+          if (!movementControllerRef.current || brushes.length === 0 || !dummyRef.current) {
+            console.warn('[FORMATION] skipped: movementController:', !!movementControllerRef.current, 'brushes:', brushes.length, 'dummy:', !!dummyRef.current);
+            break;
+          }
 
           const formationType = cmd.params.formationType as string;
           const formDuration = (cmd.params.duration as number) || 3;
@@ -1144,27 +1307,17 @@ CAMERA_MODE mode: orbit time: 15
               break;
             }
 
-            // Phase 1: Immediately hide all brush instances first (at cmdTime)
-            // This clears the previous formation so user sees brushes disappear
+            // Phase 1: Stop brush choreographer roaming at cmdTime (NO hiding - brushes fly from current positions)
             masterTimeline.call(() => {
-              // Hide all brush instances first
-              if (dummyRef.current) {
-                instancedMeshesRef.current.forEach((mesh) => {
-                  for (let i = 0; i < mesh.count; i++) {
-                    dummyRef.current!.position.set(-5000, -5000, 0);
-                    dummyRef.current!.scale.set(0, 0, 1);
-                    dummyRef.current!.updateMatrix();
-                    mesh.setMatrixAt(i, dummyRef.current!.matrix);
-                  }
-                  mesh.instanceMatrix.needsUpdate = true;
-                });
-              }
-              movementControllerRef.current?.stopAll();
+              // CRITICAL: Stop brush choreographer roaming
+              brushChoreographerRef.current?.stopAll();
             }, [], cmdTime);
 
-            // Phase 2: Update brush levels and start animation to new formation (after cmdTime)
-            // Small delay ensures user sees brushes disappear before new formation appears
+            // Phase 2: Start animation from CURRENT positions to formation
+            // Brushes fly from wherever they are (roaming position) to their target formation positions
             masterTimeline.call(() => {
+              // DO NOT clear brushPositionsRef - use current (roaming) positions as starting point
+
               // Use REFERENCE grid size for all calculations (not animation grid)
               const refCols = currentRef.gridSizeX;
               const refRows = currentRef.gridSizeY;
@@ -1206,37 +1359,69 @@ CAMERA_MODE mode: orbit time: 15
               );
 
               // Animate brushes to formation using timeline
+              const staggerDelay = (cmd.params.stagger as number) || 0.0002;
+              const staggerMode = (cmd.params.staggerMode as 'index' | 'spiral' | 'distance' | 'random') || 'index';
               movementControllerRef.current?.animateToFormation(
                 updatedBrushes,
                 targetPositions,
                 formDuration,
-                0.0002,
+                staggerDelay,
                 'power3.out',
                 currentPositions,
                 masterTimeline,
                 cmdTime, // Use actual command time, not command index
                 (brush, pos) => {
-                  if (brush.gridIndex < 5) {
-                    console.log('[AnimationStage] FORMATION onUpdate brush', brush.gridIndex, 'pos:', pos.x.toFixed(1), pos.y.toFixed(1));
-                  }
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
                     dummyRef.current.position.set(pos.x, pos.y, pos.z);
                     // Use formation brush size to match reference grid spacing
                     dummyRef.current.scale.set(formationBrushSize, formationBrushSize, 1);
+                    dummyRef.current.rotation.set(0, 0, 0); // CRITICAL: Reset rotation during formation to eliminate RANDOM_ROAM contamination
                     dummyRef.current.updateMatrix();
                     mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
                     mesh.instanceMatrix.needsUpdate = true;
                   }
                   brushPositionsRef.current.set(brush.id, pos);
-                }
+                },
+                undefined,
+                staggerMode
               );
-            }, [], index + 0.01);
+
+              // Camera dolly-out: pull back during formation to show full panorama
+              const cam = cameraRef.current;
+              if (cam) {
+                const startZ = cam.position.z;
+                // Calculate distance needed to see full reference image
+                const refCols = currentRef.gridSizeX;
+                const refRows = currentRef.gridSizeY;
+                const refBrushSize = Math.min(dimensionsRef.current.width / refCols, dimensionsRef.current.height / refRows);
+                const refWidth = refCols * refBrushSize;
+                const refHeight = refRows * refBrushSize;
+                // Target: see the full width with some margin
+                const targetZ = Math.max(refWidth, refHeight) * 1.5;
+                const dollyZ = Math.max(startZ, targetZ);
+
+                // Animate camera Z position outward during formation
+                gsap.to(cam.position, {
+                  z: dollyZ,
+                  duration: formDuration,
+                  ease: 'power2.out',
+                });
+
+                // Also update camera lookAt to center of reference image
+                const lookAtX = dimensionsRef.current.width / 2;
+                const lookAtY = dimensionsRef.current.height / 2;
+                cameraControllerRef.current?.setLookAt(lookAtX, lookAtY, 0);
+              }
+            }, [], cmdTime + 0.01);
 
           } else {
             // Regular formation (circle, line, grid, scatter)
             masterTimeline.call(() => {
               if (!movementControllerRef.current || !dummyRef.current) return;
+
+              // Clear brushPositionsRef to prevent stale position data
+              brushPositionsRef.current.clear();
 
               const formationPositions = movementControllerRef.current.calculateFormation(
                 brushes.length,
@@ -1263,6 +1448,7 @@ CAMERA_MODE mode: orbit time: 15
                   if (mesh && dummyRef.current) {
                     dummyRef.current.position.set(pos.x, pos.y, pos.z);
                     dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                    dummyRef.current.rotation.set(0, 0, 0); // Reset rotation during formation
                     dummyRef.current.updateMatrix();
                     mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
                     mesh.instanceMatrix.needsUpdate = true;
@@ -1816,36 +2002,76 @@ CAMERA_MODE mode: orbit time: 15
         }
 
         case 'RANDOM_ROAM': {
-          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) break;
+          console.log('[RANDOM_ROAM] time:', cmdTime, 'speed:', cmd.params.speed, 'amplitude:', cmd.params.amplitude);
+          if (!brushChoreographerRef.current || brushes.length === 0 || !dummyRef.current) {
+            console.log('[RANDOM_ROAM] skipped: missing refs');
+            break;
+          }
+
           const roamSpeed = (cmd.params.speed as number) || 0.5;
           const roamAmplitude = (cmd.params.amplitude as number) || 100;
-          const roamChangeInterval = (cmd.params.changeInterval as number) || 2;
-          const roamRotationSpeed = (cmd.params.rotationSpeed as number) || 1.0;
+          const roamRangeX = (cmd.params.rangeX as number) || 1.0;
+          const roamRangeY = (cmd.params.rangeY as number) || 0.7;
+          const roamRangeZ = (cmd.params.rangeZ as number) || 0.3;
+          const roamSwimSpeed = (cmd.params.swimSpeed as number) || 1.0;
 
-          // Use a proxy that ticks every frame for continuous infinite animation
-          const tickProxy = { dummy: 0 };
+          // Store params
+          const myParams = {
+            speed: roamSpeed,
+            amplitude: roamAmplitude,
+            rangeX: roamRangeX,
+            rangeY: roamRangeY,
+            rangeZ: roamRangeZ,
+            swimSpeed: roamSwimSpeed,
+          };
 
-          masterTimeline.to(tickProxy, {
-            dummy: 1,
-            duration: 0.1, // Short duration, repeats infinitely
+          // Create a NEW proxy for this command
+          const commandProxy = { t: 0 };
+
+          const finalCmdTime = cmd.time as number;
+
+          // CRITICAL: If speed is 0, this is a stop command - freeze all brushes at current positions
+          if (roamSpeed === 0) {
+            masterTimeline.call(() => {
+              brushChoreographerRef.current?.stopAll();
+              // Freeze all brushes at their current positions
+              brushes.forEach(brush => {
+                const currentPos = brushPositionsRef.current.get(brush.id) || brush.position;
+                const mesh = instancedMeshesRef.current[brush.level];
+                if (mesh && dummyRef.current) {
+                  dummyRef.current.position.set(currentPos.x, currentPos.y, currentPos.z);
+                  dummyRef.current.scale.set(brushSizeXYRef.current.x, brushSizeXYRef.current.y, 1);
+                  dummyRef.current.rotation.set(0, 0, 0);
+                  dummyRef.current.updateMatrix();
+                  mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
+                }
+              });
+              instancedMeshesRef.current.forEach(mesh => { mesh.instanceMatrix.needsUpdate = true; });
+            }, [], finalCmdTime);
+            break;
+          }
+
+          // Resume roaming before starting new animation
+          brushChoreographerRef.current?.resumeAll();
+
+          masterTimeline.to(commandProxy, {
+            t: 1,
+            duration: 0.1,
             repeat: -1,
             ease: 'linear',
             onUpdate: () => {
+              const currentTime = masterTimeline.time();
+              if (currentTime < finalCmdTime) return;
               if (!brushChoreographerRef.current || !dummyRef.current) return;
 
-              // Calculate actual elapsed time from timeline position
-              const elapsedTime = Math.max(0, masterTimeline.time() - cmdTime);
+              const elapsedTime = currentTime - finalCmdTime;
 
               brushChoreographerRef.current.randomRoamBrushes(
                 brushes,
-                {
-                  speed: roamSpeed,
-                  amplitude: roamAmplitude,
-                  changeInterval: roamChangeInterval,
-                  rotationSpeed: roamRotationSpeed,
-                },
+                myParams,
                 elapsedTime,
                 (brush, pos, rot) => {
+                  brushPositionsRef.current.set(brush.id, pos);
                   const mesh = instancedMeshesRef.current[brush.level];
                   if (mesh && dummyRef.current) {
                     dummyRef.current.position.set(pos.x, pos.y, pos.z);
@@ -1856,13 +2082,11 @@ CAMERA_MODE mode: orbit time: 15
                     dummyRef.current.updateMatrix();
                     mesh.setMatrixAt(brush.gridIndex, dummyRef.current.matrix);
                     mesh.instanceMatrix.needsUpdate = true;
-                    // Update brush position for camera tracking
-                    brushPositionsRef.current.set(brush.id, pos);
                   }
                 }
               );
             }
-          }, cmdTime);
+          }, finalCmdTime);
           break;
         }
 
@@ -1966,7 +2190,7 @@ CAMERA_MODE mode: orbit time: 15
                 }
               );
             }
-          }, index);
+          }, cmdTime);
           break;
         }
 
@@ -2004,7 +2228,7 @@ CAMERA_MODE mode: orbit time: 15
                 }
               );
             }
-          }, index);
+          }, cmdTime);
           break;
         }
 
@@ -2021,7 +2245,7 @@ CAMERA_MODE mode: orbit time: 15
               duration: flashDuration,
               intensity: flashIntensity,
             });
-          }, [], index);
+          }, [], cmdTime);
 
           // Also animate opacity from intensity to 0 using GSAP timeline
           masterTimeline.to(progressProxy, {
@@ -2036,7 +2260,7 @@ CAMERA_MODE mode: orbit time: 15
                 intensity: flashIntensity,
               });
             }
-          }, index);
+          }, cmdTime);
           break;
         }
 
@@ -2053,7 +2277,7 @@ CAMERA_MODE mode: orbit time: 15
               frequency: strobeFrequency,
               duration: strobeDuration,
             });
-          }, [], index);
+          }, [], cmdTime);
 
           // Update strobe state based on GSAP progress
           masterTimeline.to(progressProxy, {
@@ -2068,7 +2292,7 @@ CAMERA_MODE mode: orbit time: 15
                 duration: strobeDuration,
               });
             }
-          }, index);
+          }, cmdTime);
           break;
         }
 
@@ -2081,7 +2305,7 @@ CAMERA_MODE mode: orbit time: 15
             transitionEffectsRef.current?.rackFocus(startDist, endDist, rackDuration, (distance) => {
               postProcessingRef.current?.animateFocusDistance(distance, 0.016);
             });
-          }, [], index);
+          }, [], cmdTime);
           break;
         }
 
@@ -2111,15 +2335,73 @@ CAMERA_MODE mode: orbit time: 15
     masterTimeline.play(0);
 
     console.log('[AnimationStage] Script execution started, referenceImages:', referenceImages.length, referenceImages.map(r => r.id));
+    console.log('[AnimationStage] masterTimeline.duration():', masterTimeline.duration());
   }, [brushes, gridSizeX, gridSizeY, referenceImages, getNormalizedGridData, animationBrushLayers]);
 
   // Floating panel state
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [activePanelTab, setActivePanelTab] = useState<'script' | 'settings' | 'refs'>('script');
+  const [activePanelTab, setActivePanelTab] = useState<'script' | 'settings' | 'refs'>('refs');
 
   useEffect(() => {
     onStateChange?.(stageState);
   }, [stageState, onStateChange]);
+
+  // When entering animation mode, expand panel and show refs tab by default
+  useEffect(() => {
+    setIsPanelCollapsed(false);
+    setActivePanelTab('refs');
+  }, []);
+
+  // Mouse wheel controls camera zoom (push/pull)
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!cameraRef.current) return;
+      e.preventDefault();
+      const zoomSpeed = 0.1;
+      const delta = e.deltaY * zoomSpeed;
+      const newZ = Math.max(50, Math.min(3000, cameraRef.current.position.z + delta));
+      cameraRef.current.position.z = newZ;
+    };
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Keyboard shortcuts: b=brush group, p=reference image, space=play, collapse panel
+  const [showBrushGroupModal, setShowBrushGroupModal] = useState(false);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'b':
+          e.preventDefault();
+          setShowBrushGroupModal(true);
+          break;
+        case 'p':
+          e.preventDefault();
+          // Trigger reference image add
+          setActivePanelTab('refs');
+          setIsPanelCollapsed(false);
+          break;
+        case ' ':
+          e.preventDefault();
+          if (stageState.isPlaying && pause) {
+            pause();
+          } else if (play) {
+            play();
+          }
+          setIsPanelCollapsed(true);
+          break;
+        case 'h':
+          e.preventDefault();
+          setIsPanelCollapsed(prev => !prev);
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stageState.isPlaying, play, pause]);
 
   return (
     <div className="w-full h-full relative bg-black">
@@ -2268,6 +2550,123 @@ CAMERA_MODE mode: orbit time: 15
           }} /></label>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Brush Group Load Modal */}
+      {showBrushGroupModal && brushGroups && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-700 w-80 max-h-[80vh] overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
+              <h3 className="text-sm font-semibold text-white">选择笔刷组</h3>
+              <button onClick={() => setShowBrushGroupModal(false)} className="text-zinc-400 hover:text-white">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto">
+              {brushGroups.length === 0 ? (
+                <div className="text-zinc-500 text-sm text-center py-4">暂无可用的笔刷组</div>
+              ) : (
+                brushGroups.map(group => {
+                  // Get first 5 non-null slot IDs for preview
+                  const previewSlots = group.slots.filter(id => id !== null).slice(0, 5);
+                  const totalCount = group.slots.filter(id => id !== null).length;
+                  return (
+                    <div
+                      key={group.id}
+                      className="p-3 bg-zinc-700 rounded-lg hover:bg-zinc-600 cursor-pointer transition-colors mb-2"
+                      onClick={() => {
+                        // Load this brush group
+                        const maxLevels = Math.min(group.slots.length, MAX_BRUSH_LEVELS);
+                        setBrushLayersLoading(true);
+                        const canvases: (HTMLCanvasElement | null)[] = [];
+                        let loadedCount = 0;
+                        let totalToLoad = 0;
+
+                        for (let level = 0; level < maxLevels; level++) {
+                          const presetId = group.slots[level];
+                          if (presetId) {
+                            const preset = brushPresets?.find(p => p.id === presetId);
+                            if (preset && preset.layers[0]) {
+                              totalToLoad++;
+                            }
+                          }
+                        }
+
+                        if (totalToLoad === 0) {
+                          setAnimationBrushLayers([]);
+                          setBrushLayersLoading(false);
+                          setShowBrushGroupModal(false);
+                          return;
+                        }
+
+                        for (let level = 0; level < maxLevels; level++) {
+                          const presetId = group.slots[level];
+                          if (presetId) {
+                            const preset = brushPresets?.find(p => p.id === presetId);
+                            if (preset && preset.layers[0]) {
+                              const canvas = document.createElement('canvas');
+                              canvas.width = 200;
+                              canvas.height = 200;
+                              const ctx = canvas.getContext('2d');
+                              if (ctx) {
+                                const img = new Image();
+                                img.src = preset.layers[0];
+                                img.onload = () => {
+                                  ctx.drawImage(img, 0, 0, 200, 200);
+                                  canvases[level] = canvas;
+                                  loadedCount++;
+                                  if (loadedCount === totalToLoad) {
+                                    setAnimationBrushLayers(canvases);
+                                    setBrushLayersLoading(false);
+                                    setInitKey(k => k + 1);
+                                    setShowBrushGroupModal(false);
+                                  }
+                                };
+                                img.onerror = () => {
+                                  loadedCount++;
+                                  if (loadedCount === totalToLoad) {
+                                    setAnimationBrushLayers(canvases);
+                                    setBrushLayersLoading(false);
+                                    setInitKey(k => k + 1);
+                                    setShowBrushGroupModal(false);
+                                  }
+                                };
+                              }
+                            }
+                          }
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs text-zinc-400">{totalCount} 个笔刷</div>
+                      </div>
+                      {/* Show first 5 brush thumbnails */}
+                      <div className="flex gap-2 justify-center">
+                        {previewSlots.map((slotId, idx) => {
+                          const preset = brushPresets?.find(p => p.id === slotId);
+                          const layerData = preset?.layers[0];
+                          return (
+                            <div key={idx} className="w-12 h-12 bg-zinc-600 rounded border border-zinc-500 overflow-hidden">
+                              {layerData && (
+                                <img src={layerData} alt="" className="w-full h-full object-contain" />
+                              )}
+                            </div>
+                          );
+                        })}
+                        {/* Fill empty slots */}
+                        {Array.from({ length: 5 - previewSlots.length }).map((_, idx) => (
+                          <div key={`empty-${idx}`} className="w-12 h-12 bg-zinc-800 rounded border border-zinc-600" />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
       )}
 

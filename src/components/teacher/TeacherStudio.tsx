@@ -1773,13 +1773,26 @@ export const TeacherStudio = forwardRef(function TeacherStudio(
           }
           break;
         case 'b':
-          // B: open brush group load modal (only in render stage)
+          // B: only open brush group modal in render stage
+          // Animation stage handles brush group loading via its own built-in modal (b key)
           if (currentStage === 'render') {
             e.preventDefault();
             dbGetBrushGroups().then(groups => {
               setBrushGroupsForLoad(groups);
               setShowBrushGroupLoadModal(true);
             });
+          }
+          break;
+        case 'p':
+          // P: close webcam and switch to image source, open image dialog (in render or animation stage)
+          if (currentStage === 'render' || currentStage === 'animation') {
+            e.preventDefault();
+            if (currentStage === 'render') {
+              stopWebcam();
+              stopRenderLoop();
+            }
+            setDataSource('image');
+            imageInputRef.current?.click();
           }
           break;
       }
