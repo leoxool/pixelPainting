@@ -2346,6 +2346,7 @@ CAMERA_MODE mode: orbit time: 15
   const [draggedRefId, setDraggedRefId] = useState<string | null>(null); // For drag reordering
   const [dragOverRefId, setDragOverRefId] = useState<string | null>(null); // Drop target
   const dragStartedRef = useRef(false); // Track if drag actually started
+  const referenceImagesLengthRef = useRef(referenceImages.length);
 
   useEffect(() => {
     onStateChange?.(stageState);
@@ -2357,7 +2358,10 @@ CAMERA_MODE mode: orbit time: 15
     setActivePanelTab('refs');
   }, []);
 
-  // Mouse wheel controls camera zoom (push/pull)
+  // Keep ref for arrow key navigation
+  useEffect(() => {
+    referenceImagesLengthRef.current = referenceImages.length;
+  }, [referenceImages.length]);
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (!cameraRef.current) return;
@@ -2408,16 +2412,16 @@ CAMERA_MODE mode: orbit time: 15
         case 'ArrowRight':
           e.preventDefault();
           // Right arrow: go to next reference and aggregate
-          if (referenceImages.length > 1) {
-            setCurrentRefIndex(prev => (prev + 1) % referenceImages.length);
+          if (referenceImagesLengthRef.current > 1) {
+            setCurrentRefIndex(prev => (prev + 1) % referenceImagesLengthRef.current);
           }
           if (play) play();
           break;
         case 'ArrowLeft':
           e.preventDefault();
           // Left arrow: go to previous reference and aggregate
-          if (referenceImages.length > 1) {
-            setCurrentRefIndex(prev => prev === 0 ? referenceImages.length - 1 : prev - 1);
+          if (referenceImagesLengthRef.current > 1) {
+            setCurrentRefIndex(prev => prev === 0 ? referenceImagesLengthRef.current - 1 : prev - 1);
           }
           if (play) play();
           break;
@@ -2429,7 +2433,7 @@ CAMERA_MODE mode: orbit time: 15
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [stageState.isPlaying, play, pause, referenceImages]);
+  }, [stageState.isPlaying, play, pause]);
 
   return (
     <div className="w-full h-full relative bg-black">
