@@ -176,7 +176,7 @@ FORMATION type: reference index: 2 time: 14 duration: 3
 FORMATION type: reference index: 0 time: 19 duration: 3
 `);
 
-  const { images: referenceImages, addImage, getNormalizedGridData } = useReferenceImages();
+  const { images: referenceImages, addImage, removeImage, getNormalizedGridData } = useReferenceImages();
   const { parse: parseScript } = useScriptParser();
   const { parse: parseAdvancedScript } = useAdvancedScriptParser();
   const audioManager = useAudioManager({ volume: stageState.musicVolume });
@@ -2578,7 +2578,7 @@ CAMERA_MODE mode: orbit time: 15
                     }}
                     className={`px-2 py-1 rounded text-xs ${isRefMultiSelectMode ? 'bg-orange-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}
                   >
-                    {isRefMultiSelectMode ? '取消选择' : '多选'}
+                    {isRefMultiSelectMode ? '取消选择' : '选择'}
                   </button>
                   <label className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white cursor-pointer">
                     添加图片
@@ -2822,19 +2822,18 @@ CAMERA_MODE mode: orbit time: 15
                       <button
                         onClick={() => {
                           if (isRefMultiSelectMode) {
-                            // Confirm selection
-                            const imagesToAdd = referenceImages.filter(img => selectedRefIds.has(img.id));
-                            imagesToAdd.forEach(img => addImage(img.imageData, img.name));
-                            setShowRefImageModal(false);
+                            // Delete selected reference images
+                            selectedRefIds.forEach(id => removeImage(id));
                             setSelectedRefIds(new Set());
                             setIsRefMultiSelectMode(false);
+                            setShowRefImageModal(false);
                           } else {
                             setIsRefMultiSelectMode(true);
                           }
                         }}
-                        className={`px-2 py-1 rounded text-xs ${isRefMultiSelectMode ? 'bg-green-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}
+                        className={`px-2 py-1 rounded text-xs ${isRefMultiSelectMode ? 'bg-red-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}
                       >
-                        {isRefMultiSelectMode ? `确认添加 (${selectedRefIds.size})` : '多选模式'}
+                        {isRefMultiSelectMode ? `删除 (${selectedRefIds.size})` : '选择模式'}
                       </button>
                       {isRefMultiSelectMode && (
                         <button
