@@ -176,7 +176,7 @@ FORMATION type: reference index: 2 time: 14 duration: 3
 FORMATION type: reference index: 0 time: 19 duration: 3
 `);
 
-  const { images: referenceImages, addImage, removeImage, getNormalizedGridData } = useReferenceImages();
+  const { images: referenceImages, addImage, removeImage, reorderImages, getNormalizedGridData } = useReferenceImages();
   const { parse: parseScript } = useScriptParser();
   const { parse: parseAdvancedScript } = useAdvancedScriptParser();
   const audioManager = useAudioManager({ volume: stageState.musicVolume });
@@ -2343,6 +2343,9 @@ CAMERA_MODE mode: orbit time: 15
   const [activePanelTab, setActivePanelTab] = useState<'script' | 'settings' | 'refs'>('refs');
   const [selectedRefIds, setSelectedRefIds] = useState<Set<string>>(new Set()); // For multi-select reference images
   const [isRefMultiSelectMode, setIsRefMultiSelectMode] = useState(false);
+  const [draggedRefId, setDraggedRefId] = useState<string | null>(null); // For drag reordering
+  const [dragOverRefId, setDragOverRefId] = useState<string | null>(null); // Drop target
+  const dragStartedRef = useRef(false); // Track if drag actually started
 
   useEffect(() => {
     onStateChange?.(stageState);
@@ -2582,28 +2585,79 @@ CAMERA_MODE mode: orbit time: 15
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap max-h-40 overflow-y-auto">
-                {referenceImages.map((img) => (
-                  <div
-                    key={img.id}
-                    onClick={() => {
-                      setSelectedRefIds(prev => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(img.id)) {
-                          newSet.delete(img.id);
-                        } else {
-                          newSet.add(img.id);
+                {referenceImages.map((img, index) => {
+                  const isDragging = draggedRefId === img.id;
+                  const isDropTarget = dragOverRefId === img.id;
+                  return (
+                    <div
+                      key={img.id}
+                      draggable
+                      onDragStart={(e) => {
+                        dragStartedRef.current = true;
+                        e.dataTransfer.setData('text/plain', img.id);
+                        setDraggedRefId(img.id);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (draggedRefId !== img.id) {
+                          setDragOverRefId(img.id);
                         }
-                        return newSet;
-                      });
-                    }}
-                    className={`w-12 h-12 rounded border overflow-hidden cursor-pointer transition-all ${selectedRefIds.has(img.id) ? 'border-orange-500 ring-2 ring-orange-500' : 'border-zinc-600 hover:border-zinc-500'}`}
-                  >
-                    <img src={img.imageData} alt={img.name} className="w-full h-full object-cover" />
-                    {selectedRefIds.has(img.id) && (
-                      <div className="absolute top-0 right-0 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">✓</div>
-                    )}
-                  </div>
-                ))}
+                      }}
+                      onDragLeave={() => {
+                        setDragOverRefId(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedRefId(null);
+                        setDragOverRefId(null);
+                        // Reset drag started flag after a tick
+                        setTimeout(() => {
+                          dragStartedRef.current = false;
+                        }, 50);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const draggedId = e.dataTransfer.getData('text/plain');
+                        if (draggedId && draggedId !== img.id) {
+                          const fromIndex = referenceImages.findIndex(i => i.id === draggedId);
+                          const toIndex = index;
+                          if (fromIndex !== -1) {
+                            reorderImages(fromIndex, toIndex);
+                          }
+                        }
+                        setDraggedRefId(null);
+                        setDragOverRefId(null);
+                      }}
+                      onClick={() => {
+                        // Don't toggle selection if dragging actually started
+                        if (dragStartedRef.current) return;
+                        setSelectedRefIds(prev => {
+                          const newSet = new Set(prev);
+                          if (newSet.has(img.id)) {
+                            newSet.delete(img.id);
+                          } else {
+                            newSet.add(img.id);
+                          }
+                          return newSet;
+                        });
+                      }}
+                      className={`relative w-12 h-12 rounded border overflow-hidden cursor-pointer transition-all ${
+                        isDragging ? 'opacity-50' : ''
+                      } ${isDropTarget ? 'border-green-500 ring-2 ring-green-500' : ''} ${
+                        selectedRefIds.has(img.id) ? 'border-orange-500 ring-2 ring-orange-500' : 'border-zinc-600 hover:border-zinc-500'
+                      }`}
+                      title={`拖动排序 · ${img.name}`}
+                    >
+                      <img src={img.imageData} alt={img.name} className="w-full h-full object-cover" />
+                      {selectedRefIds.has(img.id) && (
+                        <div className="absolute top-0 right-0 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">✓</div>
+                      )}
+                      {/* Index number */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-center text-[10px] text-white/80 py-0.5">
+                        {index + 1}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

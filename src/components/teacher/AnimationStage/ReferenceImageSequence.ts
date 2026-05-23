@@ -142,6 +142,16 @@ export function useReferenceImages(options?: UseReferenceImagesOptions) {
     setImages(prev => prev.filter(img => img.id !== id));
   }, []);
 
+  // Reorder reference images (move from one index to another)
+  const reorderImages = useCallback((fromIndex: number, toIndex: number) => {
+    setImages(prev => {
+      const newImages = [...prev];
+      const [movedItem] = newImages.splice(fromIndex, 1);
+      newImages.splice(toIndex, 0, movedItem);
+      return newImages;
+    });
+  }, []);
+
   // Update reference image
   const updateImage = useCallback((
     id: string,
@@ -226,6 +236,7 @@ export function useReferenceImages(options?: UseReferenceImagesOptions) {
     isLoading,
     addImage,
     removeImage,
+    reorderImages,
     updateImage,
     getCurrentImage,
     nextImage,
