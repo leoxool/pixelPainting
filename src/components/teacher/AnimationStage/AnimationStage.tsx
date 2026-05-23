@@ -2371,6 +2371,7 @@ CAMERA_MODE mode: orbit time: 15
   // Keyboard shortcuts: b=brush group, p=reference image, space=play, collapse panel
   const [showBrushGroupModal, setShowBrushGroupModal] = useState(false);
   const [showRefImageModal, setShowRefImageModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null); // For P key shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in input/textarea
@@ -2383,10 +2384,14 @@ CAMERA_MODE mode: orbit time: 15
           break;
         case 'p':
           e.preventDefault();
-          // Open reference image selection modal
-          setShowRefImageModal(true);
+          // Open file input to add reference image (same as "添加图片" button)
           setActivePanelTab('refs');
           setIsPanelCollapsed(false);
+          // Trigger the hidden file input if visible, otherwise set showRefImageModal to trigger it
+          const fileInput = document.querySelector('input[type="file"][accept="image/*"]') as HTMLInputElement;
+          if (fileInput) {
+            fileInput.click();
+          }
           break;
         case ' ':
           e.preventDefault();
@@ -2400,13 +2405,6 @@ CAMERA_MODE mode: orbit time: 15
         case 'h':
           e.preventDefault();
           setIsPanelCollapsed(prev => !prev);
-          break;
-        case 'Escape':
-          if (showRefImageModal) {
-            setShowRefImageModal(false);
-            setSelectedRefIds(new Set());
-            setIsRefMultiSelectMode(false);
-          }
           break;
       }
     };
@@ -2549,37 +2547,21 @@ CAMERA_MODE mode: orbit time: 15
             <div className="p-3">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-xs text-zinc-400">
-                  {isRefMultiSelectMode ? `已选择 ${selectedRefIds.size} 张` : `${referenceImages.length} 张参考图`}
+                  {selectedRefIds.size > 0 ? `已选择 ${selectedRefIds.size} 张` : `${referenceImages.length} 张参考图`}
                 </div>
                 <div className="flex gap-2">
-                  {isRefMultiSelectMode && selectedRefIds.size > 0 && (
+                  {selectedRefIds.size > 0 && (
                     <button
                       onClick={() => {
-                        // Add selected images in order to the sequence
-                        const selectedArray = Array.from(selectedRefIds);
-                        const imagesToAdd = referenceImages.filter(img => selectedRefIds.has(img.id));
-                        imagesToAdd.forEach(img => addImage(img.imageData, img.name));
+                        // Delete selected reference images
+                        selectedRefIds.forEach(id => removeImage(id));
                         setSelectedRefIds(new Set());
-                        setIsRefMultiSelectMode(false);
                       }}
-                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-xs text-white"
+                      className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-xs text-white"
                     >
-                      添加选中
+                      删除 ({selectedRefIds.size})
                     </button>
                   )}
-                  <button
-                    onClick={() => {
-                      if (isRefMultiSelectMode) {
-                        setIsRefMultiSelectMode(false);
-                        setSelectedRefIds(new Set());
-                      } else {
-                        setIsRefMultiSelectMode(true);
-                      }
-                    }}
-                    className={`px-2 py-1 rounded text-xs ${isRefMultiSelectMode ? 'bg-orange-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}
-                  >
-                    {isRefMultiSelectMode ? '取消选择' : '选择'}
-                  </button>
                   <label className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white cursor-pointer">
                     添加图片
                     <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
@@ -2604,22 +2586,20 @@ CAMERA_MODE mode: orbit time: 15
                   <div
                     key={img.id}
                     onClick={() => {
-                      if (isRefMultiSelectMode) {
-                        setSelectedRefIds(prev => {
-                          const newSet = new Set(prev);
-                          if (newSet.has(img.id)) {
-                            newSet.delete(img.id);
-                          } else {
-                            newSet.add(img.id);
-                          }
-                          return newSet;
-                        });
-                      }
+                      setSelectedRefIds(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(img.id)) {
+                          newSet.delete(img.id);
+                        } else {
+                          newSet.add(img.id);
+                        }
+                        return newSet;
+                      });
                     }}
-                    className={`w-12 h-12 rounded border overflow-hidden cursor-pointer transition-all ${isRefMultiSelectMode ? (selectedRefIds.has(img.id) ? 'border-orange-500 ring-2 ring-orange-500' : 'border-zinc-600 opacity-60') : 'border-zinc-600 hover:border-zinc-500'}`}
+                    className={`w-12 h-12 rounded border overflow-hidden cursor-pointer transition-all ${selectedRefIds.has(img.id) ? 'border-orange-500 ring-2 ring-orange-500' : 'border-zinc-600 hover:border-zinc-500'}`}
                   >
                     <img src={img.imageData} alt={img.name} className="w-full h-full object-cover" />
-                    {isRefMultiSelectMode && selectedRefIds.has(img.id) && (
+                    {selectedRefIds.has(img.id) && (
                       <div className="absolute top-0 right-0 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">✓</div>
                     )}
                   </div>
@@ -2751,173 +2731,6 @@ CAMERA_MODE mode: orbit time: 15
       {animationBrushLayers.every(l => l === null) && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
           <div className="text-zinc-400 text-lg">Load a brush preset to start animation</div>
-        </div>
-      )}
-
-      {/* Reference Image Selection Modal - Press P to open */}
-      {showRefImageModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div className="bg-zinc-900 rounded-xl border border-zinc-700 w-[500px] max-h-[70vh] overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
-              <div>
-                <h3 className="text-sm font-semibold text-white">加载参考图</h3>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  单击选择一张参考图 · 多选模式可添加多张（按加载顺序排列）
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowRefImageModal(false);
-                  setSelectedRefIds(new Set());
-                  setIsRefMultiSelectMode(false);
-                }}
-                className="text-zinc-400 hover:text-white"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-4">
-              {/* Upload area */}
-              <div className="mb-4">
-                <label className="block w-full px-4 py-3 border-2 border-dashed border-zinc-600 hover:border-zinc-500 rounded-lg cursor-pointer text-center text-zinc-400 hover:text-zinc-300 transition-colors">
-                  <div className="flex flex-col items-center gap-1">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span className="text-sm">点击或拖拽图片到此处上传</span>
-                    <span className="text-xs text-zinc-600">支持多张图片</span>
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={async (e) => {
-                      const files = e.target.files;
-                      if (files && files.length > 0) {
-                        for (let i = 0; i < files.length; i++) {
-                          const file = files[i];
-                          const dataUrl = await new Promise<string>((resolve) => {
-                            const reader = new FileReader();
-                            reader.onload = () => resolve(reader.result as string);
-                            reader.readAsDataURL(file);
-                          });
-                          await addImage(dataUrl, file.name.replace(/\.[^.]+$/, ''));
-                        }
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Existing reference images */}
-              {referenceImages.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-zinc-500">已有参考图 ({referenceImages.length})</span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          if (isRefMultiSelectMode) {
-                            // Delete selected reference images
-                            selectedRefIds.forEach(id => removeImage(id));
-                            setSelectedRefIds(new Set());
-                            setIsRefMultiSelectMode(false);
-                            setShowRefImageModal(false);
-                          } else {
-                            setIsRefMultiSelectMode(true);
-                          }
-                        }}
-                        className={`px-2 py-1 rounded text-xs ${isRefMultiSelectMode ? 'bg-red-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}`}
-                      >
-                        {isRefMultiSelectMode ? `删除 (${selectedRefIds.size})` : '选择模式'}
-                      </button>
-                      {isRefMultiSelectMode && (
-                        <button
-                          onClick={() => {
-                            setIsRefMultiSelectMode(false);
-                            setSelectedRefIds(new Set());
-                          }}
-                          className="px-2 py-1 bg-zinc-700 text-zinc-300 hover:bg-zinc-600 rounded text-xs"
-                        >
-                          取消
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-3 max-h-60 overflow-y-auto">
-                    {referenceImages.map((img, idx) => {
-                      const isSelected = selectedRefIds.has(img.id);
-                      return (
-                        <div
-                          key={img.id}
-                          onClick={() => {
-                            if (isRefMultiSelectMode) {
-                              setSelectedRefIds(prev => {
-                                const newSet = new Set(prev);
-                                if (newSet.has(img.id)) {
-                                  newSet.delete(img.id);
-                                } else {
-                                  newSet.add(img.id);
-                                }
-                                return newSet;
-                              });
-                            } else {
-                              // Single select - add immediately
-                              addImage(img.imageData, img.name);
-                              setShowRefImageModal(false);
-                            }
-                          }}
-                          className={`relative rounded-lg border-2 overflow-hidden cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-orange-500 ring-2 ring-orange-500/50'
-                              : 'border-zinc-600 hover:border-zinc-500'
-                          }`}
-                        >
-                          <div className="aspect-square bg-zinc-800">
-                            <img src={img.imageData} alt={img.name} className="w-full h-full object-cover" />
-                          </div>
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1">
-                            <span className="text-[10px] text-white/80 truncate block">{img.name}</span>
-                          </div>
-                          {isSelected && (
-                            <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
-                          )}
-                          <div className="absolute top-1 left-1 w-4 h-4 bg-zinc-900/80 rounded-full flex items-center justify-center text-[10px] text-zinc-400">{idx + 1}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {referenceImages.length === 0 && (
-                <div className="text-center py-8 text-zinc-500 text-sm">
-                  暂无参考图，请上传图片
-                </div>
-              )}
-            </div>
-
-            {/* Footer with selection info */}
-            <div className="px-4 py-3 border-t border-zinc-700 bg-zinc-800/50">
-              <div className="flex items-center justify-between text-xs text-zinc-400">
-                <span>
-                  {isRefMultiSelectMode
-                    ? `已选择 ${selectedRefIds.size} 张参考图`
-                    : '单击选择单张 · 多选模式可添加多张'}
-                </span>
-                <span>按 ESC 关闭</span>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>
