@@ -2405,6 +2405,22 @@ CAMERA_MODE mode: orbit time: 15
           }
           setIsPanelCollapsed(true);
           break;
+        case 'ArrowRight':
+          e.preventDefault();
+          // Right arrow: go to next reference and aggregate
+          if (referenceImages.length > 1) {
+            setCurrentRefIndex(prev => (prev + 1) % referenceImages.length);
+          }
+          if (play) play();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          // Left arrow: go to previous reference and aggregate
+          if (referenceImages.length > 1) {
+            setCurrentRefIndex(prev => prev === 0 ? referenceImages.length - 1 : prev - 1);
+          }
+          if (play) play();
+          break;
         case 'h':
           e.preventDefault();
           setIsPanelCollapsed(prev => !prev);
@@ -2413,7 +2429,7 @@ CAMERA_MODE mode: orbit time: 15
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [stageState.isPlaying, play, pause]);
+  }, [stageState.isPlaying, play, pause, referenceImages]);
 
   return (
     <div className="w-full h-full relative bg-black">
